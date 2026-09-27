@@ -1,0 +1,21 @@
+{
+  "name": "abs-car",
+  "version": "1.0.0",
+  "description": "Interfaz de Audiobookshelf para el navegador del coche, con vinculación por código",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crazystress/abs-car.git"
+  }
+}

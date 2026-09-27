@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0b0b0d">
+  <title data-i18n="app.title">Audiobookshelf for my Car</title>
+  <link rel="stylesheet" href="__BASE__/static/style.css">
+  <link rel="icon" href="__BASE__/static/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="__BASE__/static/icon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="__BASE__/static/icon-180.png">
+  <link rel="manifest" href="__BASE__/static/manifest.webmanifest">
+  <script src="__BASE__/static/i18n.js"></script>
+  <script>
+    window.BASE = '__BASE__';
+    // Tema antes de pintar (evita el parpadeo): auto | light | dark
+    try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('theme')) || 'auto'; } catch (e) {}
+  </script>
+</head>
+<body>
+  <!-- Cargando -->
+  <section id="view-loading" class="view active">
+    <div class="center-msg" data-i18n="loading">Loading…</div>
+  </section>
+
+  <!-- Vinculación -->
+  <section id="view-pair" class="view">
+    <!-- Bloque centrado: fila superior (logo + idioma) con el mismo ancho que el contenido -->
+    <div class="pair-shell">
+    <div class="pair-head">
+      <img class="brand" src="__BASE__/static/icon.svg" alt="Audiobookshelf for my Car" data-i18n-alt="app.title">
+      <select id="pair-lang" class="select" aria-label="Language"></select>
+    </div>
+    <div class="pair">
+      <div class="pair-text">
+        <h1 data-i18n="pair.title"></h1>
+        <p class="pair-step"><span data-i18n="pair.step1"></span><br><span data-i18n="pair.step1b"></span> <strong id="pair-url"></strong></p>
+        <p class="pair-step" data-i18n="pair.step2"></p>
+        <div id="pair-code" class="pair-code">····</div>
+        <p id="pair-expire" class="muted"></p>
+        <!-- Requisito: sin servidor de Audiobookshelf la app no sirve -->
+        <div class="requires"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg><p><strong data-i18n="req.title"></strong> <span data-i18n="req.body"></span></p></div>
+      </div>
+      <div class="pair-qr"><img id="pair-qr" data-i18n-alt="pair.qrAlt" alt=""></div>
+    </div>
+    </div>
+    <p class="legal-foot"><span data-i18n="about.unofficial"></span> · audiobookshelf.org</p>
+  </section>
+
+  <!-- Inicio -->
+  <section id="view-home" class="view">
+    <header class="topbar">
+      <img class="brand" src="__BASE__/static/icon.svg" alt="Audiobookshelf for my Car" data-i18n-alt="app.title">
+      <nav class="tabs">
+        <button class="tab active" data-tab="continue" data-i18n="tabs.continue"></button>
+        <button class="tab" data-tab="library" data-i18n="tabs.library"></button>
+      </nav>
+      <button id="btn-settings" class="icon-btn" data-i18n-aria="aria.settings">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65a7.3 7.3 0 0 0 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65Z"/></svg>
+      </button>
+    </header>
+
+    <div id="tab-continue" class="tab-panel active">
+      <button id="hero" class="hero" hidden>
+        <img id="hero-cover" alt="">
+        <div class="hero-info">
+          <div class="hero-label" data-i18n="hero.continue"></div>
+          <div id="hero-title" class="hero-title"></div>
+          <div id="hero-author" class="hero-author"></div>
+          <div id="hero-progress"></div>
+        </div>
+        <div class="hero-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+      </button>
+      <div id="continue-grid" class="grid"></div>
+      <p id="continue-empty" class="center-msg" hidden data-i18n="continue.empty"></p>
+    </div>
+
+    <div id="tab-library" class="tab-panel">
+      <!-- Fila fija arriba: buscador -->
+      <div class="lib-bar">
+        <div class="search">
+          <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+            <input id="search-input" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="search.library">
+            <button id="search-clear" class="search-clear" hidden data-i18n-aria="aria.clearSearch">
+              <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+      </div>
+      <div id="library-chips" class="chips"></div>
+      <div id="library-grid" class="grid"></div>
+      <!-- Ficha de un autor o narrador: cabecera y sus libros -->
+      <div id="detail" hidden>
+        <button id="detail-back" class="pill big-pill"></button>
+        <div class="detail-hero">
+          <div id="detail-avatar" class="author-avatar big"></div>
+          <div class="detail-info">
+            <h2 id="detail-name"></h2>
+            <div id="detail-count" class="muted"></div>
+            <p id="detail-desc" class="detail-desc" hidden></p>
+            <button id="detail-upnext" class="upnext" hidden></button>
+          </div>
+        </div>
+        <div id="detail-sections"></div>
+      </div>
+      <button id="library-more" class="big-btn wide" hidden data-i18n="library.more"></button>
+      <!-- Barra fija abajo: secciones -->
+      <nav id="lib-nav" class="lib-nav">
+        <div id="lib-modes" class="segmented lib-modes">
+          <button data-mode="library" class="active" data-i18n="mode.library"></button>
+          <button data-mode="series" data-i18n="mode.series"></button>
+          <button data-mode="authors" data-i18n="mode.authors"></button>
+          <button data-mode="narrators" data-i18n="mode.narrators"></button>
+        </div>
+      </nav>
+    </div>
+
+    <button id="mini" class="mini" hidden>
+      <img id="mini-cover" alt="">
+      <div class="mini-info">
+        <div id="mini-title" class="mini-title"></div>
+        <div id="mini-chapter" class="mini-sub"></div>
+      </div>
+      <span class="mini-right">
+        <!-- Solo visible mientras suena -->
+        <span class="mini-playing"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span data-i18n="mini.playing"></span></span>
+        <span class="mini-open" data-i18n="mini.open"></span>
+      </span>
+    </button>
+  </section>
+
+  <!-- Reproductor -->
+  <section id="view-player" class="view">
+    <!-- Fondo: la carátula muy difuminada, a pantalla completa -->
+    <div id="p-bg" class="player-bg" aria-hidden="true"></div>
+    <div class="player">
+      <!-- Columna derecha (pantalla ancha): progreso del libro a la altura del título + carátula -->
+      <div class="player-side">
+        <div class="book-progress">
+          <div class="bp-bar"><div class="bp-fill"></div></div>
+          <div class="bp-text"><span class="bp-done">0:00</span><span class="bp-pct">0%</span><span class="bp-left">-0:00</span></div>
+        </div>
+        <div class="player-cover"><img id="p-cover" alt=""></div>
+      </div>
+      <div class="player-main">
+        <div class="player-head">
+          <button id="p-back" class="pill" data-i18n="player.back"></button>
+        </div>
+        <!-- Pantalla estrecha: progreso del libro entre la cabecera y el título -->
+        <div class="book-progress">
+          <div class="bp-bar"><div class="bp-fill"></div></div>
+          <div class="bp-text"><span class="bp-done">0:00</span><span class="bp-pct">0%</span><span class="bp-left">-0:00</span></div>
+        </div>
+        <div class="p-meta-row">
+          <div class="p-thumb"><img id="p-thumb" alt=""></div>
+          <div class="p-meta">
+            <div id="p-title" class="p-title"></div>
+            <div id="p-author" class="p-author"></div>
+          </div>
+        </div>
+
+        <div id="p-seek" class="seek" role="slider" data-i18n-aria="aria.chapterProgress">
+          <div class="seek-track">
+            <div class="seek-label"><span class="chapter-text"></span></div>
+            <div id="p-seek-fill" class="seek-fill"><div class="seek-label"><span class="chapter-text"></span></div></div>
+          </div>
+        </div>
+        <div class="times">
+          <span id="p-elapsed">0:00</span>
+          <span id="p-remaining">-0:00</span>
+        </div>
+
+        <div class="controls">
+          <button id="c-prev" class="ctrl" data-i18n-aria="aria.prevChapter">
+            <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+          </button>
+          <button id="c-back" class="ctrl" data-i18n-aria="aria.back15">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8Z"/></svg>
+            <span class="ctrl-num">15</span>
+          </button>
+          <button id="c-play" class="ctrl ctrl-play" data-i18n-aria="aria.play">
+            <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+          <button id="c-fwd" class="ctrl" data-i18n-aria="aria.fwd30">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8Z"/></svg>
+            <span class="ctrl-num">30</span>
+          </button>
+          <button id="c-next" class="ctrl" data-i18n-aria="aria.nextChapter">
+            <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+        </div>
+
+        <div class="player-foot">
+          <button id="c-speed" class="pill big-pill">1.0×</button>
+          <button id="c-bookmark" class="pill big-pill bookmark-btn" data-i18n-aria="aria.addBookmark">
+            <svg viewBox="0 0 24 24"><path d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2Zm-4 9v3h-2v-3H8v-2h3V7h2v3h3v2h-3Z"/></svg>
+          </button>
+          <button id="c-chapters" class="pill big-pill icon-pill" data-i18n-aria="aria.chapters">
+            <svg viewBox="0 0 24 24"><path d="M3 5h2v2H3V5Zm4 0h14v2H7V5Zm-4 6h2v2H3v-2Zm4 0h14v2H7v-2Zm-4 6h2v2H3v-2Zm4 0h14v2H7v-2Z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Capítulos -->
+  <div id="sheet-chapters" class="sheet" hidden>
+    <div class="sheet-box chapters-box">
+      <div class="sheet-head">
+        <h2 id="chapters-title"></h2>
+        <button class="pill big-pill" data-close data-i18n="close"></button>
+      </div>
+      <div id="chapter-list" class="chapter-list"></div>
+    </div>
+  </div>
+
+  <!-- Velocidad -->
+  <div id="sheet-speed" class="sheet" hidden>
+    <div class="sheet-box speed-box">
+      <div class="sheet-head">
+        <h2 data-i18n="speed.title"></h2>
+        <button class="pill big-pill" data-close data-i18n="close"></button>
+      </div>
+      <div id="speed-value" class="speed-value">1.0×</div>
+      <p class="speed-hint" data-i18n="speed.hint"></p>
+      <div id="speed-chips" class="speed-chips"></div>
+      <div class="speed-slider-row">
+        <button id="speed-minus" class="ctrl speed-step" data-i18n-aria="aria.slower">−</button>
+        <input id="speed-slider" type="range" min="0.5" max="3" step="0.05" value="1" data-i18n-aria="aria.speed">
+        <button id="speed-plus" class="ctrl speed-step" data-i18n-aria="aria.faster">+</button>
+      </div>
+      <div class="speed-scale"><span>0.5×</span><span>1×</span><span>1.5×</span><span>2×</span><span>2.5×</span><span>3×</span></div>
+    </div>
+  </div>
+
+  <!-- Ajustes -->
+  <div id="sheet-settings" class="sheet" hidden>
+    <div class="sheet-box small">
+      <div class="sheet-head">
+        <h2 data-i18n="settings.title"></h2>
+        <button class="pill big-pill" data-close data-i18n="close"></button>
+      </div>
+      <p id="settings-info" class="settings-info"></p>
+      <div class="setting-row">
+        <div class="setting-label"><span data-i18n="settings.language"></span></div>
+        <select id="lang-select" class="select"></select>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">
+          <span data-i18n="settings.theme"></span>
+          <small data-i18n="settings.themeHint"></small>
+        </div>
+        <div id="theme-picker" class="segmented">
+          <button data-theme-opt="auto" data-i18n="theme.auto"></button>
+          <button data-theme-opt="light" data-i18n="theme.light"></button>
+          <button data-theme-opt="dark" data-i18n="theme.dark"></button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">
+          <span data-i18n="settings.failLabel"></span>
+          <small data-i18n="settings.failHint"></small>
+        </div>
+        <div class="stepper">
+          <button id="fail-minus" class="ctrl stepper-btn" data-i18n-aria="aria.less">−</button>
+          <span id="fail-value" class="stepper-value">4</span>
+          <button id="fail-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
+        </div>
+      </div>
+      <div class="diag">
+        <div class="diag-title" data-i18n="diag.title"></div>
+        <div><span data-i18n="diag.theme"></span> <strong id="diag-theme">—</strong></div>
+        <div id="diag-theme-log" class="diag-log"></div>
+        <div id="diag-ua" class="diag-ua"></div>
+      </div>
+      <div class="about">
+        <div class="diag-title" data-i18n="about.title"></div>
+        <div class="about-app"><img src="__BASE__/static/icon.svg" alt=""><strong>ABS Car</strong> <span class="muted">v1.0.0</span></div>
+        <p data-i18n="about.unofficial"></p>
+        <p data-i18n="about.abs"></p>
+        <p><span data-i18n="about.source"></span> github.com/crazystress/abs-car</p>
+        <p class="muted" data-i18n="about.trademarks"></p>
+      </div>
+      <button id="btn-reload" class="big-btn wide" data-i18n="reload"></button>
+      <button id="btn-unlink" class="big-btn wide danger" data-i18n="unlink"></button>
+    </div>
+  </div>
+
+  <!-- Estado de la sincronización (arriba a la derecha) -->
+  <div id="sync-status" class="sync-status" hidden>
+    <svg class="i-ok" viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+    <svg class="i-fail" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    <span id="sync-text"></span>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <audio id="audio" preload="auto"></audio>
+  <script src="__BASE__/static/app.js"></script>
+</body>
+</html>

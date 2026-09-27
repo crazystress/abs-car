@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b0d">
+  <title data-i18n="link.title">Pair car</title>
+  <script src="__BASE__/static/i18n.js"></script>
+  <link rel="icon" href="__BASE__/static/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="__BASE__/static/icon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="__BASE__/static/icon-180.png">
+  <style>
+    :root { --bg:#0b0b0d; --panel:#17171b; --line:#2c2c33; --text:#f4f4f5; --muted:#9a9aa3; --accent:#f0a53a; --ink:#1a1206; --danger:#ff6b6f; --ok:#4cc38a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; padding: 32px 16px; }
+    main { width: 100%; max-width: 420px; }
+    h1 { font-size: 28px; margin: 0 0 6px; }
+    p { color: var(--muted); margin: 0 0 24px; }
+    label { display: block; font-weight: 600; margin: 18px 0 6px; }
+    input { width: 100%; font: inherit; font-size: 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    #code { font-size: 34px; font-weight: 800; letter-spacing: .25em; text-transform: uppercase; text-align: center; }
+    button { width: 100%; margin-top: 28px; font: inherit; font-size: 19px; font-weight: 700; padding: 16px; border: 0; border-radius: 12px; background: var(--accent); color: var(--ink); cursor: pointer; }
+    button:disabled { opacity: .6; }
+    .msg { margin-top: 20px; padding: 14px 16px; border-radius: 12px; background: var(--panel); }
+    .msg.error { color: var(--danger); }
+    .msg.ok { color: var(--ok); font-weight: 600; }
+    .hint { font-size: 14px; color: var(--muted); margin-top: 6px; }
+    .requires { display: flex; gap: 12px; align-items: flex-start; margin: -8px 0 8px; padding: 14px 16px; border-radius: 12px; background: var(--panel); border-left: 4px solid var(--accent); font-size: 15px; line-height: 1.45; }
+    .requires svg { width: 22px; height: 22px; flex: none; fill: var(--accent); margin-top: 1px; }
+    .requires p { margin: 0; color: var(--text); }
+    .legal { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); text-align: center; }
+    .legal p { margin: 0 0 6px; color: var(--muted); }
+    .legal a { color: var(--muted); }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .brand { width: 56px; height: 56px; }
+    .top select { width: auto; font: inherit; font-size: 15px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="top"><img class="brand" src="__BASE__/static/icon.svg" alt="Audiobookshelf for my Car" data-i18n-alt="app.title"><select id="lang" aria-label="Language"></select></div>
+    <h1 data-i18n="link.title"></h1>
+    <p data-i18n="link.intro"></p>
+    <div class="requires"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg><p><strong data-i18n="req.title"></strong> <span data-i18n="req.body"></span></p></div>
+
+    <form id="form" autocomplete="on">
+      <label for="code" data-i18n="link.code"></label>
+      <input id="code" name="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+
+      <label for="username" data-i18n="link.user"></label>
+      <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+
+      <label for="password" data-i18n="link.pass"></label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <label for="name" data-i18n="link.name"></label>
+      <input id="name" name="name" maxlength="40">
+      <div class="hint" data-i18n="link.nameHint"></div>
+
+      <button id="submit" type="submit" data-i18n="link.submit"></button>
+    </form>
+    <div id="msg" class="msg" hidden></div>
+    <button id="go-app" type="button" hidden disabled></button>
+    <footer class="legal">
+      <p data-i18n="about.unofficial"></p>
+      <p><a href="https://www.audiobookshelf.org" target="_blank" rel="noopener">audiobookshelf.org</a> · <a href="https://github.com/crazystress/abs-car" target="_blank" rel="noopener" data-i18n="about.sourceLink"></a></p>
+    </footer>
+  </main>
+
+  <script>
+    const BASE = '__BASE__';
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('submit');
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+
+    // Idioma: el del coche si viene en el enlace del QR; si no, el guardado en este móvil (por defecto inglés)
+    const langSelect = document.getElementById('lang');
+    langSelect.replaceChildren(...Object.entries(LANGS).map(([c, name]) => new Option(name, c)));
+    if (params.get('lang') in STRINGS) setLang(params.get('lang'));
+    else applyI18n();
+    langSelect.value = getLang();
+    langSelect.onchange = () => setLang(langSelect.value);
+
+    // Nombre del coche por defecto, en el idioma elegido (si el usuario no lo ha cambiado)
+    const nameInput = document.getElementById('name');
+    let nameTouched = false;
+    nameInput.addEventListener('input', () => (nameTouched = true));
+    const fillName = () => { if (!nameTouched) nameInput.value = t('link.defaultName'); };
+    fillName();
+    document.addEventListener('langchange', fillName);
+    if (code) {
+      document.getElementById('code').value = code;
+      document.getElementById('username').focus();
+    }
+
+    function show(text, kind) {
+      msg.textContent = text;
+      msg.className = 'msg ' + kind;
+      msg.hidden = false;
+    }
+
+    // Tras vincular: botón a la app con cuenta atrás de 5 s (se activa al llegar a cero).
+    // Si se vincula desde el propio navegador del coche, al abrir /car ya entra vinculado.
+    const goApp = document.getElementById('go-app');
+    let goLeft = 0;
+    const paintGoApp = () => {
+      goApp.textContent = goLeft > 0 ? t('link.goAppIn', { s: goLeft }) : t('link.goApp');
+    };
+    function startGoToApp() {
+      goLeft = 5;
+      goApp.hidden = false;
+      goApp.disabled = true;
+      paintGoApp();
+      const timer = setInterval(() => {
+        goLeft--;
+        paintGoApp();
+        if (goLeft <= 0) {
+          clearInterval(timer);
+          goApp.disabled = false;
+        }
+      }, 1000);
+    }
+    goApp.onclick = () => (location.href = BASE + '/');
+    document.addEventListener('langchange', () => !goApp.hidden && paintGoApp());
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = t('link.submitting');
+      msg.hidden = true;
+      try {
+        const res = await fetch(BASE + '/pair/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.fromEntries(new FormData(form))),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          form.hidden = true;
+          show(t('link.done', { name: data.name }), 'ok');
+          startGoToApp();
+        } else {
+          show(data.error ? t('err.' + data.error) : t('link.failed'), 'error');
+        }
+      } catch {
+        show(t('link.offline'), 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = t('link.submit');
+      }
+    });
+  </script>
+</body>
+</html>

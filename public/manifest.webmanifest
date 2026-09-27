@@ -1,0 +1,14 @@
+{
+  "name": "Audiobookshelf for my Car",
+  "short_name": "ABS Car",
+  "start_url": "__BASE__/",
+  "scope": "__BASE__/",
+  "display": "standalone",
+  "background_color": "#0b0b0d",
+  "theme_color": "#0b0b0d",
+  "icons": [
+    { "src": "__BASE__/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "__BASE__/static/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "__BASE__/static/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

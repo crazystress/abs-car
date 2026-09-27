@@ -1,0 +1,28 @@
+# Añade este servicio a tu docker-compose de Audiobookshelf (o úsalo tal cual).
+# 1) Copia .env.example a .env y pon tu dominio.  2) Revisa los valores marcados con  <-- AJUSTA
+services:
+  abs-car:
+    build: .
+    container_name: abs-car
+    restart: unless-stopped
+    environment:
+      - ABS_URL=http://audiobookshelf:80                  # <-- AJUSTA: nombre del contenedor de ABS y su puerto interno
+      - BASE_PATH=/car
+      - PUBLIC_URL=https://${ABS_DOMAIN}                 # de .env
+      - TZ=${TZ:-UTC}                                    # de .env (opcional)
+    volumes:
+      - ./abs-car-data:/data
+    networks:
+      - proxy                                              # <-- AJUSTA: la red donde están Traefik y Audiobookshelf
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy                       # <-- AJUSTA
+      - traefik.http.routers.abs-car.rule=Host(`${ABS_DOMAIN}`) && PathPrefix(`/car`)
+      - traefik.http.routers.abs-car.priority=100        # gana al router de Audiobookshelf en /car
+      - traefik.http.routers.abs-car.entrypoints=websecure        # <-- AJUSTA: tu entrypoint HTTPS
+      - traefik.http.routers.abs-car.tls.certresolver=letsencrypt # <-- AJUSTA: tu certresolver
+      - traefik.http.services.abs-car.loadbalancer.server.port=3000
+
+networks:
+  proxy:
+    external: true

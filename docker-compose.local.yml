@@ -1,0 +1,17 @@
+# Para probar en el Mac (Docker Desktop) contra tu Audiobookshelf real, sin Traefik.
+#   docker compose -f docker-compose.local.yml up -d --build
+#   → http://localhost:3310/car
+services:
+  abs-car:
+    build: .
+    container_name: abs-car-local
+    restart: unless-stopped
+    environment:
+      - ABS_URL=https://${ABS_DOMAIN}   # de .env
+      - BASE_PATH=/car
+      - COOKIE_SECURE=false   # en localhost no hay HTTPS
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./data:/data
+    ports:
+      - "3310:3000"
