@@ -2,8 +2,8 @@
 
 const BASE = window.BASE || '';
 const ABS = BASE + '/abs';
-const SKIP_BACK = 15;
-const SKIP_FWD = 30;
+const SKIP_OPTIONS = [10, 15, 30, 60];
+const SKIP_DEFAULTS = { back: 15, fwd: 30 };
 const SYNC_EVERY_MS = 15_000;
 const DEFAULT_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5];
 const SPEED_MIN = 0.5;
@@ -900,6 +900,7 @@ function seekTo(t) {
   if (target === P.trackIdx && audio.readyState > 0) audio.currentTime = t - P.tracks[target].startOffset;
   else loadTrack(target, t - P.tracks[target].startOffset, !audio.paused);
   savePosLocal(t, true);
+  if (audio.paused) pausedAt = 0; // posición elegida a mano: no retroceder al reanudar
   render();
 }
 
@@ -965,10 +966,7 @@ function setPlayerBackground(itemId) {
 async function openItem(itemId, hint = {}) {
   if (P.itemId === itemId && P.sessionId) {
     show('player');
-    if (audio.paused) {
-      await adoptServerProgress();
-      play();
-    }
+    if (audio.paused) await resume({ checkServer: true });
     return;
   }
   await closeSession();
@@ -1308,17 +1306,53 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', syncBeacon);
 
+// ---------- Saltos y retroceso al reanudar ----------
+function skipSeconds(dir) {
+  const n = store('skip:' + dir);
+  return SKIP_OPTIONS.includes(n) ? n : SKIP_DEFAULTS[dir];
+}
+
+function renderSkipButtons() {
+  for (const dir of ['back', 'fwd']) {
+    const n = skipSeconds(dir);
+    const btn = $(dir === 'back' ? 'c-back' : 'c-fwd');
+    btn.querySelector('.ctrl-num').textContent = n;
+    btn.setAttribute('aria-label', t(dir === 'back' ? 'aria.back' : 'aria.fwd', { n }));
+    document.querySelectorAll(`[data-skip-${dir}]`).forEach((b) => b.classList.toggle('active', Number(b.dataset[dir === 'back' ? 'skipBack' : 'skipFwd']) === n));
+  }
+}
+
+const rewindOnResume = () => store('rewindOnResume') !== false; // activado por defecto
+
+// Cuánto retroceder según lo que duró la pausa, para retomar el hilo
+function rewindFor(pausedMs) {
+  if (pausedMs < 10_000) return 0;
+  if (pausedMs < 60_000) return 3;
+  if (pausedMs < 10 * 60_000) return 10;
+  if (pausedMs < 60 * 60_000) return 20;
+  return 30;
+}
+
+// Reanudar tras una pausa: mira si se avanzó en otro dispositivo y retrocede unos segundos
+async function resume({ checkServer = false } = {}) {
+  if (!P.itemId) return;
+  const pausedMs = pausedAt ? Date.now() - pausedAt : 0;
+  pausedAt = 0;
+  const before = currentTime();
+  if (checkServer || pausedMs > LONG_PAUSE_MS) await adoptServerProgress();
+  const back = rewindOnResume() ? rewindFor(pausedMs) : 0;
+  // Si se ha saltado a la posición de otro dispositivo, no retroceder sobre ella
+  if (back && Math.abs(currentTime() - before) < 1) seekTo(before - back);
+  play();
+}
+
 // Controles
 const LONG_PAUSE_MS = 60_000;
 let pausedAt = 0;
 audio.addEventListener('pause', () => (pausedAt = Date.now()));
-$('c-play').onclick = async () => {
-  if (!audio.paused) return audio.pause();
-  if (pausedAt && Date.now() - pausedAt > LONG_PAUSE_MS) await adoptServerProgress();
-  play();
-};
-$('c-back').onclick = () => seekTo(currentTime() - SKIP_BACK);
-$('c-fwd').onclick = () => seekTo(currentTime() + SKIP_FWD);
+$('c-play').onclick = () => (audio.paused ? resume() : audio.pause());
+$('c-back').onclick = () => seekTo(currentTime() - skipSeconds('back'));
+$('c-fwd').onclick = () => seekTo(currentTime() + skipSeconds('fwd'));
 $('c-prev').onclick = prevChapter;
 $('c-next').onclick = nextChapter;
 
@@ -1533,10 +1567,10 @@ function setupMediaSession() {
   if (!('mediaSession' in navigator)) return;
   const ms = navigator.mediaSession;
   const handlers = {
-    play: () => play(),
+    play: () => resume(),
     pause: () => audio.pause(),
-    seekbackward: () => seekTo(currentTime() - SKIP_BACK),
-    seekforward: () => seekTo(currentTime() + SKIP_FWD),
+    seekbackward: () => seekTo(currentTime() - skipSeconds('back')),
+    seekforward: () => seekTo(currentTime() + skipSeconds('fwd')),
     previoustrack: prevChapter,
     nexttrack: nextChapter,
   };
@@ -1616,6 +1650,26 @@ applyTheme();
   $('diag-ua').textContent = navigator.userAgent;
   paint();
 })();
+
+document.querySelectorAll('[data-skip-back], [data-skip-fwd]').forEach((b) => {
+  b.onclick = () => {
+    const dir = 'skipBack' in b.dataset ? 'back' : 'fwd';
+    store('skip:' + dir, Number(b.dataset[dir === 'back' ? 'skipBack' : 'skipFwd']));
+    renderSkipButtons();
+  };
+});
+function renderRewindPicker() {
+  document.querySelectorAll('[data-rewind]').forEach((b) => b.classList.toggle('active', (b.dataset.rewind === 'on') === rewindOnResume()));
+}
+document.querySelectorAll('[data-rewind]').forEach((b) => {
+  b.onclick = () => {
+    store('rewindOnResume', b.dataset.rewind === 'on');
+    renderRewindPicker();
+  };
+});
+renderSkipButtons();
+renderRewindPicker();
+document.addEventListener('langchange', renderSkipButtons);
 
 $('fail-minus').onclick = () => setSyncFailThreshold(syncFailThreshold() - 1);
 $('fail-plus').onclick = () => setSyncFailThreshold(syncFailThreshold() + 1);
