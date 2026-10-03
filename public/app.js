@@ -1675,6 +1675,31 @@ $('s-name-form').onsubmit = async (e) => {
   }
   updateNameSave();
 };
+// ---------- Tamaño de las carátulas (ancho mínimo de columna en las cuadrículas) ----------
+const COVER_MIN = 170, COVER_MAX = 350, COVER_STEP = 20, COVER_DEFAULT = 230;
+
+function coverSize() {
+  const n = Number(store('coverSize'));
+  return n >= COVER_MIN && n <= COVER_MAX ? n : COVER_DEFAULT;
+}
+
+function applyCoverSize() {
+  const n = coverSize();
+  document.documentElement.style.setProperty('--cover-min', n + 'px');
+  $('cover-value').textContent = n;
+  $('cover-minus').disabled = n <= COVER_MIN;
+  $('cover-plus').disabled = n >= COVER_MAX;
+  // Cuántas caben por fila en esta pantalla (cuadrícula con 28 px de margen lateral y de hueco)
+  const perRow = Math.max(1, Math.floor((window.innerWidth - 56 + 28) / (n + 28)));
+  $('s-cover-hint').textContent = t('settings.coverSizeHint', { n: perRow });
+}
+
+$('cover-minus').onclick = () => { store('coverSize', Math.max(COVER_MIN, coverSize() - COVER_STEP)); applyCoverSize(); };
+$('cover-plus').onclick = () => { store('coverSize', Math.min(COVER_MAX, coverSize() + COVER_STEP)); applyCoverSize(); };
+window.addEventListener('resize', applyCoverSize);
+document.addEventListener('langchange', applyCoverSize);
+applyCoverSize();
+
 // ---------- Tema: auto (sigue al coche) | light | dark ----------
 function currentTheme() {
   const t = store('theme');
