@@ -356,6 +356,21 @@ async function handle(req, res) {
     return sendJson(res, 200, { paired: true, name: device.name, username: device.username, deviceId: device.id });
   }
 
+  // Coche: cambiar su propio nombre (solo con su cookie; JSON para evitar envíos desde formularios ajenos)
+  if (req.method === 'POST' && p === '/me') {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'not_paired' });
+    if (!String(req.headers['content-type'] || '').includes('application/json')) return sendJson(res, 415, { error: 'invalid_name' });
+    const { name } = await readJson(req);
+    const clean = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!clean) return sendJson(res, 400, { error: 'invalid_name' });
+    if (clean !== device.name) {
+      console.log(`[me] "${device.name}" renombrado a "${clean}"`);
+      device.name = clean;
+      await saveStore();
+    }
+    return sendJson(res, 200, { ok: true, name: device.name });
+  }
+
   // Coche: pedir un código
   if (req.method === 'POST' && p === '/pair/start') {
     const pollToken = cookies[PAIR_COOKIE];

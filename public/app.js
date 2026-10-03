@@ -1067,9 +1067,12 @@ function showSyncStatus(kind) {
   }
 }
 
+let lastSyncOk = 0; // hora de la última sincronización correcta (se muestra en Ajustes)
 function syncSucceeded() {
   syncFailures = 0;
+  lastSyncOk = Date.now();
   showSyncStatus('ok');
+  if ($('view-settings').classList.contains('active')) renderLastSync();
 }
 
 function syncFailed() {
@@ -1590,11 +1593,87 @@ function updateMediaMetadata(ch) {
   });
 }
 
-// ---------- Ajustes ----------
-$('btn-settings').onclick = () => {
-  $('settings-info').textContent = t('settings.info', { name: me?.name || t('link.defaultName'), user: me?.username || '?' });
+// ---------- Ajustes: página con secciones ----------
+const SETTINGS_SECTIONS = ['playback', 'appearance', 'sync', 'car', 'about'];
+const settingsNarrow = window.matchMedia('(max-width: 900px)'); // menú y sección en pantallas separadas
+const settings = { from: 'home', open: false };
+
+function currentSection() {
+  const s = store('settingsSection');
+  return SETTINGS_SECTIONS.includes(s) ? s : 'playback';
+}
+
+function openSettings() {
+  settings.from = document.querySelector('.view.active')?.id.replace('view-', '') || 'home';
+  // En pantalla estrecha se entra por la lista de secciones; en ancha, directo a la última usada
+  settings.open = !settingsNarrow.matches;
+  renderSettings();
+  show('settings');
+}
+
+function selectSection(sec) {
+  store('settingsSection', sec);
+  settings.open = true;
+  renderSettings();
+  $('s-layout').querySelector('.s-panels').scrollTop = 0;
+}
+
+function renderSettings() {
+  const sec = currentSection();
+  document.querySelectorAll('.s-nav-item').forEach((b) => b.classList.toggle('active', b.dataset.sec === sec));
+  document.querySelectorAll('.s-panel').forEach((el) => (el.hidden = el.dataset.panel !== sec));
+  const detail = settingsNarrow.matches && settings.open;
+  $('s-layout').classList.toggle('narrow', settingsNarrow.matches);
+  $('s-layout').classList.toggle('detail', detail);
+  $('s-back').textContent = '‹ ' + t(detail ? 'settings.title' : 'settings.back');
   $('fail-value').textContent = syncFailThreshold();
-  $('sheet-settings').hidden = false;
+  $('s-user').textContent = me?.username || '?';
+  if (document.activeElement !== $('s-name')) $('s-name').value = me?.name || '';
+  updateNameSave();
+  renderLastSync();
+}
+
+function renderLastSync() {
+  $('s-last-sync').textContent = lastSyncOk ? new Date(lastSyncOk).toTimeString().slice(0, 5) : t('settings.never');
+}
+
+function updateNameSave() {
+  const v = $('s-name').value.trim();
+  $('s-name-save').disabled = !v || v === me?.name;
+}
+
+$('btn-settings').onclick = openSettings;
+$('s-back').onclick = () => {
+  if (settingsNarrow.matches && settings.open) {
+    settings.open = false;
+    renderSettings();
+  } else show(settings.from);
+};
+document.querySelectorAll('.s-nav-item').forEach((b) => (b.onclick = () => selectSection(b.dataset.sec)));
+{
+  const onResize = () => $('view-settings').classList.contains('active') && renderSettings();
+  settingsNarrow.addEventListener ? settingsNarrow.addEventListener('change', onResize) : settingsNarrow.addListener(onResize);
+}
+
+// Nombre del coche: se guarda en el servidor (aparece en las sesiones y marcadores de Audiobookshelf)
+$('s-name').addEventListener('input', updateNameSave);
+$('s-name-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('s-name').value.trim();
+  if (!name || name === me?.name) return;
+  $('s-name-save').disabled = true;
+  try {
+    const res = await fetch(BASE + '/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (me) me.name = data.name;
+    $('s-name').value = data.name;
+    $('s-name').blur();
+    toast(t('settings.saved'));
+  } catch {
+    toast(t('settings.saveError'));
+  }
+  updateNameSave();
 };
 // ---------- Tema: auto (sigue al coche) | light | dark ----------
 function currentTheme() {
@@ -1680,7 +1759,6 @@ $('btn-unlink').onclick = async () => {
   await fetch(BASE + '/logout', { method: 'POST' });
   P.itemId = null;
   $('mini').hidden = true;
-  $('sheet-settings').hidden = true;
   startPairing();
 };
 document.querySelectorAll('.sheet').forEach((sheet) => {
@@ -1729,9 +1807,7 @@ document.querySelectorAll('.sheet').forEach((sheet) => {
     }
     P.chapterLabel = null;
     render();
-    if (!$('sheet-settings').hidden) {
-      $('settings-info').textContent = t('settings.info', { name: me?.name || t('link.defaultName'), user: me?.username || '?' });
-    }
+    if ($('view-settings').classList.contains('active')) renderSettings();
     if (!$('sync-status').hidden) $('sync-text').textContent = t($('sync-status').classList.contains('fail') ? 'sync.fail' : 'sync.ok', { time: new Date().toTimeString().slice(0, 5) });
   });
 })();
