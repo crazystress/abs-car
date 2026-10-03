@@ -11,9 +11,30 @@
 > Audiobookshelf server. Without it, this app can't be used. This is an **unofficial** client,
 > not affiliated with the Audiobookshelf project.
 
-An Audiobookshelf interface with big, touch-friendly buttons, designed for the car's web
-browser and served at `https://audiobookshelf.example.com/car`. The car is paired with a short
-code from your phone, so you never type passwords or keys on the car's screen.
+An Audiobookshelf audiobook player with big, touch-friendly buttons, designed for the web
+browser built into your car's touchscreen and served at `https://audiobookshelf.example.com/car`.
+The car is paired with a short code from your phone, so you never type passwords or keys on the
+car's screen.
+
+## Made for in-car browsers
+
+ABS Car is a self-hosted web app built for the large touchscreens and built-in web browsers found
+in many modern cars, such as those in **Tesla** and **BYD** vehicles. Nothing to install in the
+car: open the URL, pair it once with your phone and listen to your Audiobookshelf audiobooks
+while you drive.
+
+- **Large tap targets** that are easy to hit on a car screen, with no tiny menus.
+- **Landscape layouts** for wide dashboard screens, plus a narrower layout for smaller displays.
+- **Light, dark or automatic theme**, so the screen isn't blinding at night.
+- **Pick up where you left off**: progress syncs with your Audiobookshelf server, so you can
+  switch between the car, your phone and the web.
+- **Steering wheel and media controls** where the car's browser supports them (Media Session).
+
+It works in any modern web browser, so you can also use it on tablets, phones and desktops.
+
+> Tesla and BYD are trademarks of their respective owners. They are mentioned only to describe
+> compatibility. ABS Car is not affiliated with, endorsed by or sponsored by Tesla, BYD or any
+> other car maker.
 
 ## Features
 
@@ -137,8 +158,10 @@ Then open `http://localhost:3310/car/`.
   ([source](https://github.com/advplyr/audiobookshelf)). ABS Car does not include any
   Audiobookshelf code: it only talks to your server through its API.
 - **Dependencies:** [`qrcode`](https://github.com/soldair/node-qrcode) (MIT) and its dependencies (MIT / ISC).
-- **Trademarks:** "Audiobookshelf" is a trademark of its respective owners. The ABS Car icon
-  is an original design and does not reproduce its logo.
+- **Trademarks:** "Audiobookshelf", "Tesla", "BYD" and any other product or company names are
+  trademarks of their respective owners. They are used only to identify compatibility, which
+  does not imply any affiliation or endorsement. The ABS Car icon is an original design and
+  does not reproduce any of their logos.
 
 ## License
 
