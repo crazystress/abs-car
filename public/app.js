@@ -1686,6 +1686,8 @@ function coverSize() {
 function applyCoverSize() {
   const n = coverSize();
   document.documentElement.style.setProperty('--cover-min', n + 'px');
+  // Letra de las tarjetas: crece y mengua con la carátula, algo amortiguada para que no quede ni diminuta ni enorme
+  document.documentElement.style.setProperty('--cover-scale', (1 + (n / COVER_DEFAULT - 1) * 0.7).toFixed(3));
   $('cover-value').textContent = n;
   $('cover-minus').disabled = n <= COVER_MIN;
   $('cover-plus').disabled = n >= COVER_MAX;

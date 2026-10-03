@@ -612,3 +612,17 @@ body.playing .mini-playing { display: inline-flex; }
   .s-panel .setting-row { flex-wrap: wrap; }
 }
 .stepper-btn:disabled { opacity: .35; cursor: default; }
+
+/* Textos de las tarjetas proporcionales al tamaño de carátula elegido (--cover-scale, 1 = 230 px) */
+.grid:not(.list-mode) { --cs: var(--cover-scale, 1); }
+.grid:not(.list-mode) .card-title { font-size: calc(24px * var(--cs)); margin-top: calc(10px * var(--cs)); }
+.grid:not(.list-mode) .card-author { font-size: calc(20px * var(--cs)); }
+.grid:not(.list-mode) .prog-pct { font-size: calc(15px * var(--cs)); }
+.grid:not(.list-mode) .card .prog-row { margin-top: calc(10px * var(--cs)); }
+.grid:not(.list-mode) .card .bar { height: calc(8px * var(--cs)); }
+.grid:not(.list-mode) .finished-tag { font-size: calc(17px * var(--cs)); left: calc(10px * var(--cs)); bottom: calc(10px * var(--cs)); padding: calc(6px * var(--cs)) calc(12px * var(--cs)) calc(6px * var(--cs)) calc(8px * var(--cs)); }
+.grid:not(.list-mode) .finished-tag svg { width: calc(20px * var(--cs)); height: calc(20px * var(--cs)); }
+.grid:not(.list-mode) .seq-badge { font-size: calc(17px * var(--cs)); top: calc(10px * var(--cs)); left: calc(10px * var(--cs)); padding: calc(4px * var(--cs)) calc(11px * var(--cs)); }
+.grid:not(.list-mode) .author-badge { font-size: calc(17px * var(--cs)); }
+.grid:not(.list-mode) .author-badge svg { width: calc(18px * var(--cs)); height: calc(18px * var(--cs)); }
+.grid:not(.list-mode) .author-initials { font-size: calc(56px * var(--cs)); }
