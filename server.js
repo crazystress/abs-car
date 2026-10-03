@@ -44,6 +44,50 @@ function saveStore() {
   return saveChain;
 }
 
+// ---------- Datos enviados a cada coche (bytes reales que salen de este servidor) ----------
+// device.usage = { day, today, month, thisMonth, total, session }; «session» se reinicia al abrir un libro (/play)
+const localDay = () => new Date().toLocaleDateString('sv-SE'); // AAAA-MM-DD en la zona horaria del contenedor (TZ)
+let usageDirty = false;
+
+function addUsage(device, bytes) {
+  if (!bytes) return;
+  const u = (device.usage ||= { day: '', today: 0, month: '', thisMonth: 0, total: 0, session: 0 });
+  const day = localDay(), month = day.slice(0, 7);
+  if (u.day !== day) { u.day = day; u.today = 0; }
+  if (u.month !== month) { u.month = month; u.thisMonth = 0; }
+  u.today += bytes;
+  u.thisMonth += bytes;
+  u.total += bytes;
+  u.session += bytes;
+  usageDirty = true;
+}
+
+function usageOf(device) {
+  const u = device.usage || {};
+  const day = localDay();
+  return {
+    session: u.session || 0,
+    today: u.day === day ? u.today : 0,
+    month: u.month === day.slice(0, 7) ? u.thisMonth : 0,
+    total: u.total || 0,
+  };
+}
+
+// Cuenta lo que se escribe en la respuesta (incluido lo que llega por pipe desde Audiobookshelf)
+function countResponse(res, device) {
+  const { write, end } = res;
+  const size = (chunk, enc) => (chunk ? (typeof chunk === 'string' ? Buffer.byteLength(chunk, typeof enc === 'string' ? enc : 'utf8') : chunk.length) : 0);
+  res.write = function (chunk, enc, cb) { addUsage(device, size(chunk, enc)); return write.call(this, chunk, enc, cb); };
+  res.end = function (chunk, enc, cb) { if (typeof chunk !== 'function') addUsage(device, size(chunk, enc)); return end.call(this, chunk, enc, cb); };
+}
+
+// Guardar los contadores como mucho cada 30 s (no en cada trozo de audio)
+setInterval(() => {
+  if (!usageDirty) return;
+  usageDirty = false;
+  saveStore();
+}, 30_000).unref();
+
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const randomToken = () => crypto.randomBytes(32).toString('base64url');
 
@@ -280,6 +324,7 @@ async function proxy(req, res, device, absPath, search) {
     body = await readBody(req);
     // Identificar el coche en las sesiones de escucha de Audiobookshelf
     if (/\/play(\/[\w-]+)?$/.test(absPath)) {
+      if (device.usage) device.usage.session = 0; // nuevo libro abierto: empieza el contador de esta sesión
       let json = {};
       try { json = JSON.parse(body.toString() || '{}'); } catch {}
       json.deviceInfo = {
@@ -315,6 +360,8 @@ async function proxy(req, res, device, absPath, search) {
     const v = upstream.headers.get(h);
     if (v) outHeaders[h] = v;
   }
+  // En cada sincronización (cada 15 s mientras suena) van los contadores de datos: sin peticiones extra
+  if (/^\/api\/session\/[\w-]+\/sync$/.test(absPath)) outHeaders['x-car-usage'] = JSON.stringify(usageOf(device));
   res.writeHead(upstream.status, outHeaders);
   if (!upstream.body) return res.end();
   Readable.fromWeb(upstream.body).on('error', () => res.destroy()).pipe(res);
@@ -335,6 +382,7 @@ async function handle(req, res) {
 
   const cookies = parseCookies(req);
   const device = findDeviceByToken(cookies[DEVICE_COOKIE]);
+  if (device && !device.invalid) countResponse(res, device);
 
   // Páginas
   if (req.method === 'GET' && p === '/') return serveFile(res, 'index.html');
@@ -353,7 +401,7 @@ async function handle(req, res) {
       device.lastSeen = Date.now();
       saveStore();
     }
-    return sendJson(res, 200, { paired: true, name: device.name, username: device.username, deviceId: device.id });
+    return sendJson(res, 200, { paired: true, name: device.name, username: device.username, deviceId: device.id, usage: usageOf(device) });
   }
 
   // Coche: cambiar su propio nombre (solo con su cookie; JSON para evitar envíos desde formularios ajenos)
@@ -505,7 +553,7 @@ server.listen(PORT, () => {
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {
     server.close();
-    await saveChain;
+    await (usageDirty ? saveStore() : saveChain); // no perder los últimos contadores de datos
     process.exit(0);
   });
 }

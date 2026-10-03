@@ -65,7 +65,7 @@ const authorOf = (item) => {
 
 class RelinkError extends Error {}
 
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, onResponse } = {}) {
   const res = await fetch(ABS + path, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
@@ -79,6 +79,7 @@ async function api(path, { method = 'GET', body } = {}) {
       throw new RelinkError();
     }
   }
+  onResponse?.(res);
   if (!res.ok) {
     const err = new Error(`HTTP ${res.status}`);
     err.status = res.status;
@@ -176,6 +177,55 @@ function card(item, { seq } = {}) {
   el.onclick = () => openItem(item.id, { title: metaOf(item).title, author: authorOf(item) });
   return el;
 }
+
+// ---------- Datos consumidos (bytes reales que el servidor ha enviado a este coche) ----------
+const USAGE_ICON = 'M16 6h3v14h-3zM10.5 10h3v10h-3zM5 14h3v6H5z';
+const showUsage = () => store('usageShow') !== false; // visible por defecto
+let usage = null; // { session, today, month, total } en bytes
+
+function fmtBytes(n) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+  const num = i === 0 || n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+  return `${num.toLocaleString(getLang())} ${units[i]}`;
+}
+
+function setUsage(header) {
+  if (!header) return;
+  try { usage = JSON.parse(header); } catch { return; }
+  paintUsage();
+}
+
+function paintUsage() {
+  const el = $('p-usage');
+  el.hidden = !showUsage() || !usage;
+  if (el.hidden) return;
+  const b = (n) => `<b>${escapeHtml(fmtBytes(n))}</b>`;
+  el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${USAGE_ICON}"/></svg><span>${t('usage.line', { session: b(usage.session), today: b(usage.today) })}</span>`;
+}
+
+async function renderSettingsUsage() {
+  try {
+    const d = await (await fetch(BASE + '/me')).json();
+    if (d.usage) usage = { ...usage, ...d.usage, session: usage?.session ?? d.usage.session };
+  } catch {}
+  const u = usage || { today: 0, month: 0, total: 0 };
+  $('s-usage').innerHTML = [['usage.today', u.today], ['usage.month', u.month], ['usage.total', u.total]]
+    .map(([k, n]) => `<span>${escapeHtml(t(k))}</span><b>${escapeHtml(fmtBytes(n))}</b>`).join('');
+}
+
+function renderUsagePicker() {
+  document.querySelectorAll('[data-usage-show]').forEach((b) => b.classList.toggle('active', (b.dataset.usageShow === 'on') === showUsage()));
+}
+
+// En pantalla estrecha la columna de la carátula no se ve: el dato va bajo los tiempos del capítulo
+(function placeUsage() {
+  const narrow = window.matchMedia('(max-width: 1100px)');
+  const place = () => (narrow.matches ? document.querySelector('.player-main .times') : document.querySelector('.player-cover')).after($('p-usage'));
+  place();
+  narrow.addEventListener ? narrow.addEventListener('change', place) : narrow.addListener(place);
+})();
 
 // ---------- Datos de escucha del libro en «Continuar» ----------
 const showHeroStats = () => store('heroStats') !== false; // visible por defecto
@@ -1053,6 +1103,7 @@ async function openItem(itemId, hint = {}) {
 }
 
 async function startSession(autoplay) {
+  if (usage) { usage.session = 0; paintUsage(); } // el servidor reinicia el contador de la sesión al abrir el libro
   const s = await api(`/api/items/${P.itemId}/play`, {
     method: 'POST',
     body: {
@@ -1149,6 +1200,7 @@ async function syncNow() {
     await api(`/api/session/${P.sessionId}/sync`, {
       method: 'POST',
       body: { currentTime: t, timeListened: listened, duration: P.duration },
+      onResponse: (r) => setUsage(r.headers.get('x-car-usage')),
     });
     P.listened = Math.max(0, P.listened - listened);
     P.lastSync = Date.now();
@@ -1690,6 +1742,7 @@ function renderSettings() {
   if (document.activeElement !== $('s-name')) $('s-name').value = me?.name || '';
   updateNameSave();
   renderLastSync();
+  if (sec === 'sync') renderSettingsUsage();
 }
 
 function renderLastSync() {
@@ -1839,6 +1892,14 @@ document.querySelectorAll('[data-hero-stats]').forEach((b) => {
     if (heroStats.id) renderHeroStats(heroStats.id);
   };
 });
+document.querySelectorAll('[data-usage-show]').forEach((b) => {
+  b.onclick = () => {
+    store('usageShow', b.dataset.usageShow === 'on');
+    renderUsagePicker();
+    paintUsage();
+  };
+});
+renderUsagePicker();
 renderHeroStatsPicker();
 renderSkipButtons();
 renderRewindPicker();
@@ -1903,6 +1964,7 @@ document.querySelectorAll('.sheet').forEach((sheet) => {
     render();
     if ($('view-settings').classList.contains('active')) renderSettings();
     if (heroStats.id) paintHeroStats();
+    paintUsage();
     if (!$('sync-status').hidden) $('sync-text').textContent = t($('sync-status').classList.contains('fail') ? 'sync.fail' : 'sync.ok', { time: new Date().toTimeString().slice(0, 5) });
   });
 })();
