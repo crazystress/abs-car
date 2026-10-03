@@ -55,6 +55,7 @@ function show(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
 }
 
+const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const coverUrl = (id) => `${ABS}/api/items/${id}/cover?width=600`;
 const metaOf = (item) => item?.media?.metadata || {};
 const authorOf = (item) => {
@@ -176,6 +177,63 @@ function card(item, { seq } = {}) {
   return el;
 }
 
+// ---------- Datos de escucha del libro en «Continuar» ----------
+const showHeroStats = () => store('heroStats') !== false; // visible por defecto
+const STAT_ICONS = {
+  started: 'M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Z',
+  sessions: 'M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9Z',
+  listened: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5Z',
+};
+let heroStats = { id: null, data: null };
+
+function fmtDay(ms) {
+  const d = new Date(ms), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return t('stats.today');
+  if (diff === 1) return t('stats.yesterday');
+  const opts = { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) };
+  return d.toLocaleDateString(getLang(), opts).replace('.', '');
+}
+
+function fmtListened(sec) {
+  const min = Math.floor(sec / 60);
+  if (min < 1) return '< 1 min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+}
+
+function paintHeroStats() {
+  const el = $('hero-stats');
+  const { id, data } = heroStats;
+  const startedAt = progressById[id]?.startedAt || data?.firstStartedAt;
+  const parts = [];
+  const bold = (v) => `<b>${escapeHtml(v)}</b>`;
+  if (startedAt) parts.push(['started', t('stats.started', { date: bold(fmtDay(startedAt)) })]);
+  if (data?.sessions) parts.push(['sessions', t(data.sessions === 1 ? 'stats.sessions.one' : 'stats.sessions', { n: bold(String(data.sessions)) })]);
+  if (data?.listened >= 60) parts.push(['listened', t('stats.listened', { time: bold(fmtListened(data.listened)) })]);
+  el.innerHTML = parts.map(([k, html]) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${STAT_ICONS[k]}"/></svg>${html}</span>`).join('');
+  el.hidden = !showHeroStats() || !parts.length;
+}
+
+async function renderHeroStats(id) {
+  if (heroStats.id !== id) heroStats = { id, data: null };
+  paintHeroStats(); // la fecha de inicio ya viene con el progreso; sesiones y tiempo llegan después
+  if (!showHeroStats()) return;
+  try {
+    const res = await fetch(`${BASE}/stats/${encodeURIComponent(id)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (heroStats.id !== id) return; // cambió el libro mientras tanto
+    heroStats.data = data;
+    paintHeroStats();
+  } catch {}
+}
+
+function renderHeroStatsPicker() {
+  document.querySelectorAll('[data-hero-stats]').forEach((b) => b.classList.toggle('active', (b.dataset.heroStats === 'on') === showHeroStats()));
+}
+
 async function loadHome() {
   try {
     await loadProgress();
@@ -190,6 +248,7 @@ async function loadHome() {
       $('hero-author').textContent = authorOf(first);
       $('hero-progress').innerHTML = progressRow(progressById[first.id]?.progress);
       $('hero').onclick = () => openItem(first.id, { title: metaOf(first).title, author: authorOf(first) });
+      renderHeroStats(first.id);
     }
     $('continue-grid').replaceChildren(...rest.map(card));
     $('continue-empty').hidden = books.length > 0;
@@ -1773,6 +1832,14 @@ document.querySelectorAll('[data-rewind]').forEach((b) => {
     renderRewindPicker();
   };
 });
+document.querySelectorAll('[data-hero-stats]').forEach((b) => {
+  b.onclick = () => {
+    store('heroStats', b.dataset.heroStats === 'on');
+    renderHeroStatsPicker();
+    if (heroStats.id) renderHeroStats(heroStats.id);
+  };
+});
+renderHeroStatsPicker();
 renderSkipButtons();
 renderRewindPicker();
 document.addEventListener('langchange', renderSkipButtons);
@@ -1835,6 +1902,7 @@ document.querySelectorAll('.sheet').forEach((sheet) => {
     P.chapterLabel = null;
     render();
     if ($('view-settings').classList.contains('active')) renderSettings();
+    if (heroStats.id) paintHeroStats();
     if (!$('sync-status').hidden) $('sync-text').textContent = t($('sync-status').classList.contains('fail') ? 'sync.fail' : 'sync.ok', { time: new Date().toTimeString().slice(0, 5) });
   });
 })();

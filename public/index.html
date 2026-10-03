@@ -68,6 +68,7 @@
           <div id="hero-title" class="hero-title"></div>
           <div id="hero-author" class="hero-author"></div>
           <div id="hero-progress"></div>
+          <div id="hero-stats" class="hero-stats" hidden></div>
         </div>
         <div class="hero-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
       </button>
@@ -303,6 +304,16 @@
               <button id="cover-minus" class="ctrl stepper-btn" data-i18n-aria="aria.less">−</button>
               <span id="cover-value" class="stepper-value s-px">230</span>
               <button id="cover-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.heroStats"></span>
+              <small data-i18n="settings.heroStatsHint"></small>
+            </div>
+            <div class="segmented">
+              <button data-hero-stats="on" data-i18n="settings.show"></button>
+              <button data-hero-stats="off" data-i18n="settings.hide"></button>
             </div>
           </div>
           <div class="setting-row">

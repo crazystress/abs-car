@@ -463,6 +463,22 @@ async function handle(req, res) {
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie(DEVICE_COOKIE, '', 0) });
   }
 
+  // Estadísticas de escucha de un libro: el servidor suma las sesiones para no mandar al coche
+  // la lista entera (cada sesión de Audiobookshelf trae muchos datos)
+  const statsMatch = req.method === 'GET' && p.match(/^\/stats\/([\w-]+)$/);
+  if (statsMatch) {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
+    const r = await absFetch(device, `/api/me/item/listening-sessions/${statsMatch[1]}?itemsPerPage=100000`);
+    if (!r.ok) return sendJson(res, r.status === 404 ? 404 : 502, { error: 'abs_error' });
+    const { total, sessions = [] } = await r.json();
+    let listened = 0, firstStartedAt = 0;
+    for (const sess of sessions) {
+      listened += Number(sess.timeListening) || 0;
+      if (sess.startedAt && (!firstStartedAt || sess.startedAt < firstStartedAt)) firstStartedAt = sess.startedAt;
+    }
+    return sendJson(res, 200, { sessions: total ?? sessions.length, listened: Math.round(listened), firstStartedAt: firstStartedAt || null });
+  }
+
   // Proxy a Audiobookshelf
   if (p.startsWith('/abs/')) {
     if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
