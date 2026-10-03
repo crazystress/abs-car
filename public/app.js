@@ -1711,8 +1711,225 @@ function updateMediaMetadata(ch) {
   });
 }
 
+// ---------- Ubicación y registro de escuchas ----------
+// Cada escucha continua es un «tramo» (play → pausa; una pausa corta en el mismo libro lo continúa).
+// Se envía al servidor de ABS Car con la ruta (un punto cada ~30 s) si la ubicación está activada.
+const geoAvailable = () => window.isSecureContext && 'geolocation' in navigator;
+const geoEnabled = () => geoAvailable() && store('geoEnabled') === true;
+const GEO_EVERY_MS = 30_000;
+const SEGMENT_RESUME_MS = 3 * 60_000; // pausa más corta que esto en el mismo libro: mismo tramo
+const SEGMENT_SEND_MS = 30_000;
+const GEO = { watchId: null, last: null, error: null };
+let seg = null; // tramo en curso: { id, itemId, title, author, startedAt, endedAt, startPos, endPos, listened, playingSince, points }
+let segTimer = null;
+
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+
+function startGeo() {
+  if (!geoEnabled() || GEO.watchId !== null) return;
+  GEO.watchId = navigator.geolocation.watchPosition(onGeoPosition, (e) => {
+    GEO.error = e.code === e.PERMISSION_DENIED ? 'denied' : 'error';
+    if ($('view-settings').classList.contains('active')) renderGeoSettings();
+  }, { enableHighAccuracy: true, maximumAge: 10_000, timeout: 60_000 });
+}
+
+function stopGeo() {
+  if (GEO.watchId !== null) navigator.geolocation.clearWatch(GEO.watchId);
+  GEO.watchId = null;
+}
+
+function onGeoPosition(pos) {
+  GEO.error = null;
+  GEO.last = { t: Date.now(), lat: +pos.coords.latitude.toFixed(5), lon: +pos.coords.longitude.toFixed(5), acc: Math.round(pos.coords.accuracy) };
+  if (seg && !audio.paused) addSegPoint(false);
+}
+
+// Añade la última posición al tramo (como mucho una cada 30 s, salvo al empezar y al terminar)
+function addSegPoint(force) {
+  const p = GEO.last;
+  if (!seg || !p || Date.now() - p.t > 60_000) return;
+  const prev = seg.points[seg.points.length - 1] || seg.lastSent;
+  if (!force && prev && p.t - prev.t < GEO_EVERY_MS) return;
+  if (prev && prev.t === p.t) return;
+  seg.points.push(p);
+}
+
+function segListened() {
+  return Math.round(seg.listened + (seg.playingSince ? (Date.now() - seg.playingSince) / 1000 : 0));
+}
+
+function segPayload(final) {
+  return {
+    id: seg.id, itemId: seg.itemId, title: seg.title, author: seg.author, startedAt: seg.startedAt,
+    endedAt: seg.playingSince ? Date.now() : seg.endedAt, startPos: seg.startPos, endPos: seg.endPos ?? currentTime(),
+    listened: segListened(), points: seg.points, final, lang: getLang(),
+  };
+}
+
+async function sendSegment(final) {
+  if (!seg) return;
+  const body = segPayload(final);
+  const sent = body.points.length;
+  try {
+    const res = await fetch(BASE + '/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok && seg && seg.id === body.id) {
+      if (sent) seg.lastSent = seg.points[sent - 1];
+      seg.points.splice(0, sent); // los ya enviados; si falla, se reintentan en el siguiente envío
+    }
+  } catch {}
+}
+
+function onSegmentPlay() {
+  if (!P.itemId) return;
+  const now = Date.now();
+  if (!(seg && seg.itemId === P.itemId && now - seg.endedAt < SEGMENT_RESUME_MS)) {
+    seg = { id: newId(), itemId: P.itemId, title: P.title, author: P.author, startedAt: now, endedAt: now,
+      startPos: currentTime(), endPos: null, listened: 0, playingSince: 0, points: [], lastSent: null };
+  }
+  seg.playingSince = now;
+  seg.endPos = null;
+  startGeo();
+  addSegPoint(true);
+  clearInterval(segTimer);
+  segTimer = setInterval(() => {
+    addSegPoint(false);
+    sendSegment(false);
+  }, SEGMENT_SEND_MS);
+}
+
+function onSegmentPause() {
+  if (!seg || !seg.playingSince) return;
+  seg.listened += (Date.now() - seg.playingSince) / 1000;
+  seg.playingSince = 0;
+  seg.endedAt = Date.now();
+  seg.endPos = currentTime();
+  clearInterval(segTimer);
+  addSegPoint(true);
+  stopGeo();
+  sendSegment(true);
+}
+
+audio.addEventListener('play', onSegmentPlay);
+audio.addEventListener('pause', onSegmentPause);
+window.addEventListener('pagehide', () => {
+  if (!seg) return;
+  const body = JSON.stringify(segPayload(true));
+  navigator.sendBeacon?.(BASE + '/log', new Blob([body], { type: 'application/json' }));
+});
+
+// Ajustes → Ubicación
+function renderGeoSettings() {
+  const secure = window.isSecureContext, supported = 'geolocation' in navigator;
+  $('geo-insecure').hidden = secure;
+  $('geo-unsupported').hidden = !secure || supported;
+  const on = geoEnabled();
+  document.querySelectorAll('[data-geo]').forEach((b) => {
+    b.classList.toggle('active', (b.dataset.geo === 'on') === on);
+    b.disabled = !geoAvailable();
+  });
+  let status = t('geo.off');
+  if (!geoAvailable()) status = t('geo.unavailable');
+  else if (GEO.error === 'denied') status = t('geo.denied');
+  else if (on && GEO.last) status = t('geo.lastFix', { ago: Math.max(0, Math.round((Date.now() - GEO.last.t) / 1000)), acc: GEO.last.acc });
+  else if (on) status = t('geo.waiting');
+  $('geo-status').textContent = status;
+}
+
+document.querySelectorAll('[data-geo]').forEach((b) => {
+  b.onclick = () => {
+    if (!geoAvailable()) return;
+    if (b.dataset.geo === 'off') {
+      store('geoEnabled', false);
+      stopGeo();
+      return renderGeoSettings();
+    }
+    // Pedir permiso ya, con el usuario delante (el navegador muestra su aviso)
+    navigator.geolocation.getCurrentPosition((pos) => {
+      store('geoEnabled', true);
+      onGeoPosition(pos);
+      if (!audio.paused) startGeo();
+      renderGeoSettings();
+    }, (e) => {
+      GEO.error = e.code === e.PERMISSION_DENIED ? 'denied' : 'error';
+      store('geoEnabled', false);
+      toast(t(e.code === e.PERMISSION_DENIED ? 'geo.denied' : 'geo.failed'));
+      renderGeoSettings();
+    }, { enableHighAccuracy: true, timeout: 20_000 });
+  };
+});
+
+$('btn-log-clear').onclick = async () => {
+  if (!confirm(t('geo.clearConfirm'))) return;
+  try {
+    const res = await fetch(BASE + '/log', { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    seg = null;
+    toast(t('geo.cleared'));
+  } catch {
+    toast(t('err.generic'));
+  }
+};
+
+// ---------- Estadísticas ----------
+const stats = { from: 'home' };
+const ROUTE_ICON = 'M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z';
+const fmtKm = (m) => `${(m / 1000).toLocaleString(getLang(), { maximumFractionDigits: m < 10_000 ? 1 : 0 })} km`;
+const fmtKmh = (m, s) => (s > 0 ? `${Math.round((m / s) * 3.6)} km/h` : '—');
+const fmtClock = (ms) => new Date(ms).toTimeString().slice(0, 5);
+
+async function openStats() {
+  stats.from = document.querySelector('.view.active')?.id.replace('view-', '') || 'home';
+  $('st-back').textContent = '‹ ' + t('settings.back');
+  $('st-geo-off').hidden = geoEnabled();
+  $('st-tiles').replaceChildren(centerMsg(t('loading')));
+  $('st-books').replaceChildren();
+  $('st-log').replaceChildren();
+  show('stats');
+  if (seg) await sendSegment(false); // que el tramo en curso salga ya en la lista
+  try {
+    const res = await fetch(BASE + '/log?limit=60');
+    if (!res.ok) throw new Error();
+    renderStats(await res.json());
+  } catch {
+    $('st-tiles').replaceChildren(centerMsg(t('err.generic')));
+  }
+}
+
+function renderStats({ totals, books, segments }) {
+  const tile = (value, label) => `<div class="st-tile"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`;
+  const total = totals.moving + totals.stopped;
+  $('st-tiles').innerHTML = [
+    tile(fmtKm(totals.distance), t('stats.km')),
+    tile(fmtListened(totals.listened), t('stats.listenedTotal')),
+    tile(fmtKmh(totals.distance, totals.moving), t('stats.avgSpeed')),
+    tile(total ? `${Math.round((totals.stopped / total) * 100)} %` : '—', t('stats.stopped')),
+  ].join('');
+
+  const max = Math.max(1, ...books.map((b) => b.distance));
+  $('st-books').innerHTML = books.length
+    ? books.map((b) => `<div class="st-book"><span class="t">${escapeHtml(b.title)}</span><span class="v">${escapeHtml(fmtKm(b.distance))}</span>
+        <div class="bar"><div class="bar-fill" style="width:${((b.distance / max) * 100).toFixed(1)}%"></div></div></div>`).join('')
+    : `<p class="st-empty">${escapeHtml(t('stats.noKm'))}</p>`;
+
+  $('st-log').innerHTML = segments.length
+    ? segments.map((sg) => {
+        const meta = [`<b>${escapeHtml(fmtListened(sg.listened))}</b>`];
+        if (sg.distance) meta.push(`<b>${escapeHtml(fmtKm(sg.distance))}</b>`, escapeHtml(fmtKmh(sg.distance, sg.moving)));
+        if (sg.stopped >= 60) meta.push(escapeHtml(t('stats.stoppedFor', { time: fmtListened(sg.stopped) })));
+        const route = sg.from || sg.to
+          ? `<div class="route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ROUTE_ICON}"/></svg>${escapeHtml(sg.from || '?')} → ${escapeHtml(sg.to || '?')}</div>`
+          : '';
+        return `<div class="st-seg"><div class="when">${escapeHtml(fmtDay(sg.startedAt))} · ${fmtClock(sg.startedAt)} → ${fmtClock(sg.endedAt)}</div>
+          <div class="book">${escapeHtml(sg.title || '—')}</div><div class="meta">${meta.join('<span>·</span>')}</div>${route}</div>`;
+      }).join('')
+    : `<p class="st-empty">${escapeHtml(t('stats.empty'))}</p>`;
+}
+
+$('btn-stats').onclick = openStats;
+$('st-back').onclick = () => show(stats.from);
+
 // ---------- Ajustes: página con secciones ----------
-const SETTINGS_SECTIONS = ['playback', 'appearance', 'sync', 'car', 'about'];
+const SETTINGS_SECTIONS = ['playback', 'appearance', 'sync', 'location', 'car', 'about'];
 const settingsNarrow = window.matchMedia('(max-width: 900px)'); // menú y sección en pantallas separadas
 const settings = { from: 'home', open: false };
 
@@ -1750,6 +1967,7 @@ function renderSettings() {
   updateNameSave();
   renderLastSync();
   if (sec === 'sync') renderSettingsUsage();
+  if (sec === 'location') renderGeoSettings();
 }
 
 function renderLastSync() {

@@ -75,7 +75,12 @@ from Wikimedia Commons. See [credits](docs/screenshots/CREDITS.md).</sub>
   **Series**, **Authors** and **Narrators** views.
 - **Progress sync** with Audiobookshelf, offline-tolerant and respectful of progress made on
   other devices, with a configurable warning after repeated sync failures.
-- **Settings page** organised in sections (Playback, Appearance, Sync, This car, About), with
+- **Statistics** with a listening log: when, which book and for how long, and, with location
+  turned on, where each listen started and ended (e.g. *Getafe → Madrid*), kilometres driven while
+  listening (also per book), average speed while moving and time spent stopped in traffic.
+  Location is opt-in, needs HTTPS and is stored only on your ABS Car server; place names come
+  from OpenStreetMap.
+- **Settings page** organised in sections (Playback, Appearance, Sync, Location, This car, About), with
   an editable car name and the data sent to the car today, this month and since pairing
   (measured on the server).
 - **Light / dark / black (OLED, night) / auto theme**, **English, Spanish and French**, and an
@@ -95,7 +100,9 @@ Phone ──code + username/password──▶ /car/pair
   automatically. The car only receives a cookie valid for one year.
 - All API calls and audio go through the built-in proxy, which only allows what the app needs.
 - The server also keeps, per car, the data usage counters shown in Settings (in
-  `abs-car-data/store.json`). Nothing is sent anywhere else.
+  `abs-car-data/store.json`) and the listening log (in `abs-car-data/logs/`). If location is on,
+  only the start and end coordinates of each listen are sent to OpenStreetMap (Nominatim) to get
+  place names. Nothing else leaves your server, and the log can be deleted from Settings.
 - To unpair: ⚙️ Settings → "Unlink this car". You can also remove the car from
   `abs-car-data/store.json` and restart the container.
 

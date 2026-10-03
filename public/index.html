@@ -55,6 +55,9 @@
         <button class="tab active" data-tab="continue" data-i18n="tabs.continue"></button>
         <button class="tab" data-tab="library" data-i18n="tabs.library"></button>
       </nav>
+      <button id="btn-stats" class="icon-btn" data-i18n-aria="aria.stats">
+        <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+      </button>
       <button id="btn-settings" class="icon-btn" data-i18n-aria="aria.settings">
         <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64L4.57 11c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65a7.3 7.3 0 0 0 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65Z"/></svg>
       </button>
@@ -237,6 +240,23 @@
     </div>
   </div>
 
+  <!-- Estadísticas: kilómetros, tiempo parado/en marcha, velocidad media y registro de escuchas -->
+  <section id="view-stats" class="view">
+    <header class="s-head">
+      <button id="st-back" class="pill big-pill"></button>
+      <h1 data-i18n="stats.title"></h1>
+    </header>
+    <div class="st-body">
+      <p id="st-geo-off" class="requires st-notice" hidden><span data-i18n="stats.geoOff"></span></p>
+      <div id="st-tiles" class="st-tiles"></div>
+      <h2 class="section-title" data-i18n="stats.byBook"></h2>
+      <div id="st-books" class="st-books"></div>
+      <h2 class="section-title" data-i18n="stats.log"></h2>
+      <div id="st-log" class="st-log"></div>
+      <p class="st-attrib" data-i18n="stats.osm"></p>
+    </div>
+  </section>
+
   <!-- Ajustes: página con menú de secciones a la izquierda y opciones a la derecha -->
   <section id="view-settings" class="view">
     <header class="s-head">
@@ -248,6 +268,7 @@
         <button class="s-nav-item" data-sec="playback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 14.5v-9l6 4.5-6 4.5Z"/></svg><span data-i18n="settings.sec.playback"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
         <button class="s-nav-item" data-sec="appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8Zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></svg><span data-i18n="settings.sec.appearance"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
         <button class="s-nav-item" data-sec="sync"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.65 8.01l1.46 1.46A8 8 0 0 0 12 4Zm0 14a6 6 0 0 1-5.65-8.01L4.89 8.53A8 8 0 0 0 12 20v3l4-4-4-4v3Z"/></svg><span data-i18n="settings.sec.sync"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+        <button class="s-nav-item" data-sec="location"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/></svg><span data-i18n="settings.sec.location"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
         <button class="s-nav-item" data-sec="car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99ZM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM5 11l1.5-4.5h11L19 11H5Z"/></svg><span data-i18n="settings.sec.car"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
         <button class="s-nav-item" data-sec="about"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg><span data-i18n="settings.sec.about"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
       </nav>
@@ -372,6 +393,29 @@
               <button id="fail-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
             </div>
           </div>
+        </div>
+
+        <div class="s-panel" data-panel="location">
+          <h2 class="s-panel-title" data-i18n="settings.sec.location"></h2>
+          <!-- La geolocalización del navegador solo funciona en páginas seguras (HTTPS) -->
+          <div id="geo-insecure" class="requires s-alert" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg><p data-i18n="geo.needsHttps"></p></div>
+          <div id="geo-unsupported" class="requires s-alert" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg><p data-i18n="geo.unsupported"></p></div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="geo.enable"></span>
+              <small data-i18n="geo.enableHint"></small>
+            </div>
+            <div id="geo-picker" class="segmented">
+              <button data-geo="on" data-i18n="on"></button>
+              <button data-geo="off" data-i18n="off"></button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label"><span data-i18n="geo.status"></span></div>
+            <strong id="geo-status" class="s-value s-value-sm">—</strong>
+          </div>
+          <p class="s-note" data-i18n="geo.privacy"></p>
+          <button id="btn-log-clear" class="big-btn wide danger" data-i18n="geo.clear"></button>
         </div>
 
         <div class="s-panel" data-panel="car">
