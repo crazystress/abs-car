@@ -227,8 +227,7 @@ function renderUsagePicker() {
   narrow.addEventListener ? narrow.addEventListener('change', place) : narrow.addListener(place);
 })();
 
-// ---------- Audio cargado por adelantado (datos reales del reproductor del navegador) ----------
-const BUFFER_ICON = 'M5 20h14v-2H5v2Zm14-9h-4V3H9v8H5l7 7 7-7Z';
+// ---------- Audio descargado por adelantado (dato real del reproductor del navegador) ----------
 const showBuffer = () => store('bufferShow') !== false; // visible por defecto
 let bufferPaintedAt = 0;
 
@@ -241,17 +240,17 @@ function bufferedAhead() {
   return 0;
 }
 
+// Franja más clara en la barra del capítulo: desde el inicio hasta donde llega lo ya descargado
 function paintBuffer(force) {
-  const el = $('p-buffer');
   if (!force && Date.now() - bufferPaintedAt < 1000) return; // como mucho una vez por segundo
   bufferPaintedAt = Date.now();
-  el.hidden = !showBuffer() || !P.itemId || audio.readyState === 0;
-  if (el.hidden) return;
-  const ahead = bufferedAhead();
-  const sec = Math.floor(ahead);
-  const time = sec < 60 ? `${sec} s` : fmtListened(sec);
-  el.classList.toggle('low', !audio.paused && ahead < 60);
-  el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${BUFFER_ICON}"/></svg><span>${t('buffer.line', { time: `<b>${escapeHtml(time)}</b>` })}</span>`;
+  const el = $('p-seek-buffer');
+  const ch = P.chapters.length ? P.chapters[chapterIndexAt(currentTime())] : null;
+  if (!showBuffer() || !P.itemId || audio.readyState === 0) return void (el.style.width = '0');
+  const start = ch ? ch.start : 0, end = ch ? ch.end : P.duration;
+  const loadedTo = currentTime() + bufferedAhead() * (audio.playbackRate || 1); // en tiempo del libro
+  const frac = Math.min(1, Math.max(0, (loadedTo - start) / (end - start || 1)));
+  el.style.width = (frac * 100).toFixed(2) + '%';
 }
 
 function renderBufferPicker() {

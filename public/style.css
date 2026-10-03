@@ -380,6 +380,7 @@ body.playing .mini-playing { display: inline-flex; }
    La capa llena se recorta con clip-path, así el texto siempre se lee. */
 .seek-track { position: relative; height: 48px; background: var(--panel-2); border-radius: 14px; overflow: hidden; }
 .seek-fill { position: absolute; inset: 0; background: var(--text); clip-path: inset(0 100% 0 0); }
+.seek-buffer { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: var(--text); opacity: .18; } /* hasta dónde está descargado */
 .seek-label {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 24px;
   font-size: 21px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden;
@@ -638,6 +639,6 @@ body.playing .mini-playing { display: inline-flex; }
 .p-usage b { color: var(--text); font-weight: 700; }
 .p-info { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; }
 .player-main .p-info { justify-content: flex-start; margin-top: 4px; }
-.p-buffer.low, .p-buffer.low svg, .p-buffer.low b { color: var(--danger); } /* queda menos de 1 min cargado mientras suena */
+
 .s-usage { display: grid; grid-template-columns: auto auto; gap: 4px 20px; font-size: 22px; color: var(--text-2); text-align: right; flex: none; }
 .s-usage b { color: var(--text); font-size: 26px; font-variant-numeric: tabular-nums; }

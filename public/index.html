@@ -144,8 +144,6 @@
         <!-- Datos enviados a este coche (medidos en el servidor); en pantalla estrecha se mueve bajo los tiempos -->
         <div id="p-info" class="p-info">
           <div id="p-usage" class="p-usage" hidden></div>
-          <!-- Audio ya descargado por delante de la posición actual (para túneles y zonas sin cobertura) -->
-          <div id="p-buffer" class="p-usage p-buffer" hidden></div>
         </div>
       </div>
       <div class="player-main">
@@ -167,6 +165,8 @@
 
         <div id="p-seek" class="seek" role="slider" data-i18n-aria="aria.chapterProgress">
           <div class="seek-track">
+            <!-- Audio ya descargado por delante de la posición actual (túneles, zonas sin cobertura) -->
+            <div id="p-seek-buffer" class="seek-buffer"></div>
             <div class="seek-label"><span class="chapter-text"></span></div>
             <div id="p-seek-fill" class="seek-fill"><div class="seek-label"><span class="chapter-text"></span></div></div>
           </div>
