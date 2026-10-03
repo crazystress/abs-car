@@ -231,13 +231,20 @@ function renderUsagePicker() {
 const showBuffer = () => store('bufferShow') !== false; // visible por defecto
 let bufferPaintedAt = 0;
 
-// Segundos de escucha ya descargados por delante (a la velocidad actual), dentro de la pista actual
+// Segundos de escucha ya descargados por delante (a la velocidad actual), dentro de la pista actual.
+// Con MP4/M4B el navegador informa a veces de lo descargado en tramos separados por huecos de pocos
+// segundos justo delante de la posición: se tratan como continuos.
+const BUFFER_GAP_S = 30;
 function bufferedAhead() {
   const now = audio.currentTime, b = audio.buffered;
+  let end = -1;
   for (let i = 0; i < b.length; i++) {
-    if (b.start(i) <= now + 0.5 && now <= b.end(i)) return (b.end(i) - now) / (audio.playbackRate || 1);
+    if (end < 0) {
+      if (b.start(i) <= now + 0.5 && now <= b.end(i)) end = b.end(i);
+    } else if (b.start(i) - end <= BUFFER_GAP_S) end = Math.max(end, b.end(i));
+    else break;
   }
-  return 0;
+  return end < 0 ? 0 : (end - now) / (audio.playbackRate || 1);
 }
 
 // Franja más clara en la barra del capítulo: desde el inicio hasta donde llega lo ya descargado
