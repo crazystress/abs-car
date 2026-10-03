@@ -53,6 +53,7 @@ function toast(msg) {
 
 function show(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
+  updateUsageStream();
 }
 
 const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -187,7 +188,7 @@ function fmtBytes(n) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
-  const num = i === 0 || n >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+  const num = i < 2 ? Math.round(n) : Math.round(n * 10) / 10; // B y KB enteros; MB y GB con un decimal
   return `${num.toLocaleString(getLang())} ${units[i]}`;
 }
 
@@ -204,6 +205,21 @@ function paintUsage() {
   const b = (n) => `<b>${escapeHtml(fmtBytes(n))}</b>`;
   el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${USAGE_ICON}"/></svg><span>${t('usage.line', { session: b(usage.session), today: b(usage.today) })}</span>`;
 }
+
+// Con el reproductor en pantalla, el servidor manda el contador cuando cambia (server-sent events)
+let usageSource = null;
+function updateUsageStream() {
+  const want = typeof EventSource === 'function' && showUsage() && !!P.itemId && document.visibilityState === 'visible'
+    && $('view-player').classList.contains('active');
+  if (want && !usageSource) {
+    usageSource = new EventSource(BASE + '/usage/stream');
+    usageSource.onmessage = (e) => setUsage(e.data);
+  } else if (!want && usageSource) {
+    usageSource.close();
+    usageSource = null;
+  }
+}
+document.addEventListener('visibilitychange', updateUsageStream);
 
 async function renderSettingsUsage() {
   try {
@@ -1141,6 +1157,7 @@ async function openItem(itemId, hint = {}) {
 
 async function startSession(autoplay) {
   if (usage) { usage.session = 0; paintUsage(); } // el servidor reinicia el contador de la sesión al abrir el libro
+  updateUsageStream();
   const s = await api(`/api/items/${P.itemId}/play`, {
     method: 'POST',
     body: {
@@ -1958,6 +1975,7 @@ document.querySelectorAll('[data-buffer-show]').forEach((b) => {
 });
 renderBufferPicker();
     paintUsage();
+    updateUsageStream();
     paintBuffer(true);
   };
 });
