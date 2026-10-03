@@ -35,6 +35,13 @@ const STORE_FILE = path.join(DATA_DIR, 'store.json');
 
 // ---------- Almacenamiento (JSON en volumen) ----------
 fs.mkdirSync(DATA_DIR, { recursive: true });
+// Aviso claro si la carpeta de datos no admite escritura (p. ej. creada por Docker como root): sin esto
+// las vinculaciones y contadores solo vivirían en memoria y se perderían al reiniciar
+try {
+  fs.accessSync(DATA_DIR, fs.constants.W_OK);
+} catch {
+  console.error(`[store] ¡${DATA_DIR} no admite escritura! Las vinculaciones no se guardarán. Da la carpeta al usuario del contenedor (uid 1000): chown -R 1000:1000 <carpeta-de-datos>`);
+}
 let store = { devices: {} };
 try {
   store = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
@@ -98,7 +105,11 @@ setInterval(() => {
 // mismo libro continúa el tramo). Guarda el libro, horas, posiciones y, si el coche tiene la
 // ubicación activada, puntos de la ruta cada ~30 s. Un fichero por coche en DATA_DIR/logs/.
 const LOG_DIR = path.join(DATA_DIR, 'logs');
-fs.mkdirSync(LOG_DIR, { recursive: true });
+try {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+} catch (e) {
+  console.error(`[log] no se puede crear ${LOG_DIR} (${e.code}): el registro de escuchas no se guardará en disco`);
+}
 const LOG_MAX_SEGMENTS = 2000;
 const LOG_MAX_POINTS = 3000; // por tramo (~25 h a un punto cada 30 s)
 const logs = new Map(); // device.id → [tramos]
