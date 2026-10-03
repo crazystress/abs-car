@@ -88,22 +88,28 @@ Phone ──code + username/password──▶ /car/pair
 ## Deployment
 
 ABS Car runs as a single Docker container next to your Audiobookshelf server, behind the same
-reverse proxy and domain, on the `/car` path.
+reverse proxy and domain, on the `/car` path. A ready-made image is published for every release
+on the GitHub Container Registry, for `linux/amd64` and `linux/arm64`:
 
-1. Clone the repository on your server and create your `.env` from the template
-   (`.env` is not committed):
+```
+ghcr.io/crazystress/abs-car:latest    # newest release
+ghcr.io/crazystress/abs-car:1.1.0     # a specific version
+```
+
+1. Download [`docker-compose.yml`](docker-compose.yml) and [`.env.example`](.env.example) into a
+   folder on your server, and create your `.env` from the template:
    ```bash
-   git clone https://github.com/crazystress/abs-car.git && cd abs-car
    cp .env.example .env   # set your domain in ABS_DOMAIN
    ```
-2. Review the values marked with `<-- AJUSTA` in `docker-compose.yml`:
+   Or add the `abs-car` service to the compose file you already use for Audiobookshelf.
+2. Review the values marked with `<-- CHANGE` in `docker-compose.yml`:
    - `ABS_URL`: the **internal** address of your Audiobookshelf container (usually port 80),
      e.g. `http://audiobookshelf:80` or `http://<audiobookshelf-ip>`.
    - The network shared with Traefik and Audiobookshelf.
    - Your Traefik HTTPS `entrypoint` and `certresolver` (copy them from your Audiobookshelf router).
 3. Start it:
    ```bash
-   docker compose up -d --build abs-car
+   docker compose up -d abs-car
    ```
 4. Check `https://audiobookshelf.example.com/car/healthz` → `{"ok":true}`.
 5. Open `https://audiobookshelf.example.com/car` in the car and pair it with your phone.
@@ -138,10 +144,22 @@ http:
 ### Updating
 
 ```bash
-git pull && docker compose up -d --build abs-car
+docker compose pull abs-car && docker compose up -d abs-car
 ```
 
-Paired cars are kept in `abs-car-data/`.
+Paired cars are kept in `abs-car-data/`, so they survive updates. To stay on a specific
+version, use a version tag such as `:1.1.0` instead of `:latest`. The changes in each version
+are listed in the [releases](https://github.com/crazystress/abs-car/releases).
+
+### Building the image yourself
+
+If you prefer to build from source, clone the repository and replace the `image:` line in
+`docker-compose.yml` with `build: .`:
+
+```bash
+git clone https://github.com/crazystress/abs-car.git && cd abs-car
+docker compose up -d --build abs-car
+```
 
 ## Environment variables
 
