@@ -1856,7 +1856,7 @@ applyCoverSize();
 // ---------- Tema: auto (sigue al coche) | light | dark ----------
 function currentTheme() {
   const t = store('theme');
-  return ['auto', 'light', 'dark'].includes(t) ? t : 'auto';
+  return ['auto', 'light', 'dark', 'black'].includes(t) ? t : 'auto';
 }
 
 function applyTheme() {
@@ -1865,7 +1865,7 @@ function applyTheme() {
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.classList.toggle('active', b.dataset.themeOpt === mode));
   // Color de la barra del navegador, según el tema efectivo
   const light = mode === 'light' || (mode === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f2f2f5' : '#0b0b0d');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f2f2f5' : mode === 'black' ? '#000000' : '#0b0b0d');
 }
 
 document.querySelectorAll('[data-theme-opt]').forEach((b) => {
@@ -1879,6 +1879,20 @@ document.querySelectorAll('[data-theme-opt]').forEach((b) => {
   mq.addEventListener ? mq.addEventListener('change', applyTheme) : mq.addListener(applyTheme);
 }
 applyTheme();
+
+// Fondo del reproductor: carátula difuminada (por defecto) o liso, del color del tema
+const playerBgPlain = () => store('playerBg') === 'plain';
+function applyPlayerBg() {
+  document.body.classList.toggle('plain-bg', playerBgPlain());
+  document.querySelectorAll('[data-player-bg]').forEach((b) => b.classList.toggle('active', (b.dataset.playerBg === 'plain') === playerBgPlain()));
+}
+document.querySelectorAll('[data-player-bg]').forEach((b) => {
+  b.onclick = () => {
+    store('playerBg', b.dataset.playerBg);
+    applyPlayerBg();
+  };
+});
+applyPlayerBg();
 
 // Diagnóstico: ¿el navegador del coche expone el tema claro/oscuro? (prefers-color-scheme)
 (function themeDiagnostic() {

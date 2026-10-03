@@ -70,6 +70,37 @@
   }
 }
 
+/* Tema negro (OLED / noche): fondo negro puro, paneles negros con borde fino en vez de rellenos grises,
+   y menos blanco brillante (texto algo atenuado, barra del capítulo sin relleno blanco) */
+:root[data-theme="black"] {
+  --bg: #000;
+  --panel: #000;
+  --panel-2: #121214;
+  --line: rgba(255,255,255,.16); /* borde de paneles y botones */
+  --text: #dcdce0;
+  --text-2: #b4b4bc;
+  --text-3: #aeaeb6;
+  --text-faint: #3c3c44;
+  --text-done: #4c4c54;
+  --muted: #84848c;
+  --shadow: rgba(0,0,0,.6);
+  --bg-veil: rgba(0,0,0,.78);
+  --scroll-thumb: #26262c;
+  --scroll-thumb-hover: #3a3a42;
+  --nav-border: rgba(255,255,255,.18);
+  color-scheme: dark;
+}
+:root[data-theme="black"] :where(.hero, .mini, .sheet-box, .s-panel, .ctrl, .pill, .icon-btn, .tab, .chip, .big-btn:not(.danger):not(.accent),
+  .s-nav-item.active, .search input, .select, .s-input, .p-thumb img, .requires, .toast) {
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+:root[data-theme="black"] .ctrl-play { box-shadow: none; }
+:root[data-theme="black"] .s-nav-item.active { box-shadow: inset 0 0 0 1.5px var(--line), inset 4px 0 0 var(--accent); }
+:root[data-theme="black"] .tab.active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 2px var(--accent); }
+:root[data-theme="black"] .seek-fill { background: #34343a; } /* lo escuchado del capítulo, sin bloque blanco */
+:root[data-theme="black"] .seek-fill .seek-label { color: var(--text); }
+:root[data-theme="black"] .segmented button.active { box-shadow: inset 0 0 0 1.5px var(--line); }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
 body {
@@ -346,6 +377,7 @@ body.playing .mini-playing { display: inline-flex; }
   opacity: 0; transition: opacity .6s ease;
 }
 .player-bg.ready { opacity: 1; }
+body.plain-bg .player-bg { display: none; } /* Ajustes → Apariencia → Fondo del reproductor: liso */
 /* Velo por encima para que texto y botones se lean bien en ambos temas */
 .player-bg::after { content: ''; position: absolute; inset: 0; background: var(--bg-veil); }
 #view-player > .player { position: relative; z-index: 1; }
