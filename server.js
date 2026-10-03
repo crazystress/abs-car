@@ -23,6 +23,7 @@ const PAIR_COOKIE = 'abs_car_pair';
 const DEVICE_MAX_AGE = 365 * 24 * 3600;
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
 const STORE_FILE = path.join(DATA_DIR, 'store.json');
 
 // ---------- Almacenamiento (JSON en volumen) ----------
@@ -244,7 +245,7 @@ async function serveFile(res, file) {
   if (!full.startsWith(PUBLIC_DIR + path.sep)) return sendJson(res, 404, { error: 'not found' });
   try {
     let data = await fsp.readFile(full);
-    if (/\.(html|webmanifest)$/.test(file)) data = Buffer.from(data.toString().replaceAll('__BASE__', BASE));
+    if (/\.(html|webmanifest)$/.test(file)) data = Buffer.from(data.toString().replaceAll('__BASE__', BASE).replaceAll('__VERSION__', VERSION));
     res.writeHead(200, { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   } catch {
@@ -285,7 +286,7 @@ async function proxy(req, res, device, absPath, search) {
         ...(json.deviceInfo || {}),
         deviceId: device.id,
         clientName: 'ABS Car',
-        clientVersion: '1.0.0',
+        clientVersion: VERSION,
         model: device.name,
       };
       body = JSON.stringify(json);
