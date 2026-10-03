@@ -68,6 +68,7 @@
           <div id="hero-title" class="hero-title"></div>
           <div id="hero-author" class="hero-author"></div>
           <div id="hero-progress"></div>
+          <div id="hero-stats" class="hero-stats" hidden></div>
         </div>
         <div class="hero-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
       </button>
@@ -160,6 +161,8 @@
 
         <div id="p-seek" class="seek" role="slider" data-i18n-aria="aria.chapterProgress">
           <div class="seek-track">
+            <!-- Audio ya descargado por delante de la posición actual (túneles, zonas sin cobertura) -->
+            <div id="p-seek-buffer" class="seek-buffer"></div>
             <div class="seek-label"><span class="chapter-text"></span></div>
             <div id="p-seek-fill" class="seek-fill"><div class="seek-label"><span class="chapter-text"></span></div></div>
           </div>
@@ -234,86 +237,182 @@
     </div>
   </div>
 
-  <!-- Ajustes -->
-  <div id="sheet-settings" class="sheet" hidden>
-    <div class="sheet-box small">
-      <div class="sheet-head">
-        <h2 data-i18n="settings.title"></h2>
-        <button class="pill big-pill" data-close data-i18n="close"></button>
-      </div>
-      <p id="settings-info" class="settings-info"></p>
-      <div class="setting-row">
-        <div class="setting-label"><span data-i18n="settings.language"></span></div>
-        <select id="lang-select" class="select"></select>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">
-          <span data-i18n="settings.theme"></span>
-          <small data-i18n="settings.themeHint"></small>
+  <!-- Ajustes: página con menú de secciones a la izquierda y opciones a la derecha -->
+  <section id="view-settings" class="view">
+    <header class="s-head">
+      <button id="s-back" class="pill big-pill"></button>
+      <h1 id="s-title" data-i18n="settings.title"></h1>
+    </header>
+    <div id="s-layout" class="s-layout">
+      <nav class="s-nav" aria-label="Settings">
+        <button class="s-nav-item" data-sec="playback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 14.5v-9l6 4.5-6 4.5Z"/></svg><span data-i18n="settings.sec.playback"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+        <button class="s-nav-item" data-sec="appearance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8Zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></svg><span data-i18n="settings.sec.appearance"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+        <button class="s-nav-item" data-sec="sync"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.65 8.01l1.46 1.46A8 8 0 0 0 12 4Zm0 14a6 6 0 0 1-5.65-8.01L4.89 8.53A8 8 0 0 0 12 20v3l4-4-4-4v3Z"/></svg><span data-i18n="settings.sec.sync"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+        <button class="s-nav-item" data-sec="car"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99ZM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM5 11l1.5-4.5h11L19 11H5Z"/></svg><span data-i18n="settings.sec.car"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+        <button class="s-nav-item" data-sec="about"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg><span data-i18n="settings.sec.about"></span><span class="s-nav-chev" aria-hidden="true">›</span></button>
+      </nav>
+      <div class="s-panels">
+        <div class="s-panel" data-panel="playback">
+          <h2 class="s-panel-title" data-i18n="settings.sec.playback"></h2>
+          <div class="setting-row">
+            <div class="setting-label"><span data-i18n="settings.skipBack"></span></div>
+            <div class="segmented">
+              <button data-skip-back="10">10 s</button>
+              <button data-skip-back="15">15 s</button>
+              <button data-skip-back="30">30 s</button>
+              <button data-skip-back="60">60 s</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label"><span data-i18n="settings.skipFwd"></span></div>
+            <div class="segmented">
+              <button data-skip-fwd="10">10 s</button>
+              <button data-skip-fwd="15">15 s</button>
+              <button data-skip-fwd="30">30 s</button>
+              <button data-skip-fwd="60">60 s</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.rewind"></span>
+              <small data-i18n="settings.rewindHint"></small>
+            </div>
+            <div class="segmented">
+              <button data-rewind="on" data-i18n="on"></button>
+              <button data-rewind="off" data-i18n="off"></button>
+            </div>
+          </div>
         </div>
-        <div id="theme-picker" class="segmented">
-          <button data-theme-opt="auto" data-i18n="theme.auto"></button>
-          <button data-theme-opt="light" data-i18n="theme.light"></button>
-          <button data-theme-opt="dark" data-i18n="theme.dark"></button>
+
+        <div class="s-panel" data-panel="appearance">
+          <h2 class="s-panel-title" data-i18n="settings.sec.appearance"></h2>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.theme"></span>
+              <small data-i18n="settings.themeHint"></small>
+            </div>
+            <div id="theme-picker" class="segmented">
+              <button data-theme-opt="auto" data-i18n="theme.auto"></button>
+              <button data-theme-opt="light" data-i18n="theme.light"></button>
+              <button data-theme-opt="dark" data-i18n="theme.dark"></button>
+              <button data-theme-opt="black" data-i18n="theme.black"></button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.playerBg"></span>
+              <small data-i18n="settings.playerBgHint"></small>
+            </div>
+            <div class="segmented">
+              <button data-player-bg="blur" data-i18n="settings.playerBgBlur"></button>
+              <button data-player-bg="plain" data-i18n="settings.playerBgPlain"></button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.coverSize"></span>
+              <small id="s-cover-hint"></small>
+            </div>
+            <div class="stepper">
+              <button id="cover-minus" class="ctrl stepper-btn" data-i18n-aria="aria.less">−</button>
+              <span id="cover-value" class="stepper-value s-px">230</span>
+              <button id="cover-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.heroStats"></span>
+              <small data-i18n="settings.heroStatsHint"></small>
+            </div>
+            <div class="segmented">
+              <button data-hero-stats="on" data-i18n="settings.show"></button>
+              <button data-hero-stats="off" data-i18n="settings.hide"></button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.bufferShow"></span>
+              <small data-i18n="settings.bufferShowHint"></small>
+            </div>
+            <div class="segmented">
+              <button data-buffer-show="on" data-i18n="settings.show"></button>
+              <button data-buffer-show="off" data-i18n="settings.hide"></button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label"><span data-i18n="settings.language"></span></div>
+            <select id="lang-select" class="select"></select>
+          </div>
+        </div>
+
+        <div class="s-panel" data-panel="sync">
+          <h2 class="s-panel-title" data-i18n="settings.sec.sync"></h2>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.lastSync"></span>
+              <small data-i18n="settings.lastSyncHint"></small>
+            </div>
+            <strong id="s-last-sync" class="s-value">—</strong>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.usage"></span>
+              <small data-i18n="settings.usageHint"></small>
+            </div>
+            <div id="s-usage" class="s-usage"></div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span data-i18n="settings.failLabel"></span>
+              <small data-i18n="settings.failHint"></small>
+            </div>
+            <div class="stepper">
+              <button id="fail-minus" class="ctrl stepper-btn" data-i18n-aria="aria.less">−</button>
+              <span id="fail-value" class="stepper-value">4</span>
+              <button id="fail-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="s-panel" data-panel="car">
+          <h2 class="s-panel-title" data-i18n="settings.sec.car"></h2>
+          <form id="s-name-form" class="setting-row s-name-row">
+            <label class="setting-label" for="s-name">
+              <span data-i18n="settings.carName"></span>
+              <small data-i18n="settings.carNameHint"></small>
+            </label>
+            <div class="s-name-edit">
+              <input id="s-name" class="s-input" maxlength="40" autocomplete="off" spellcheck="false">
+              <button id="s-name-save" class="big-btn accent" type="submit" data-i18n="settings.save" disabled></button>
+            </div>
+          </form>
+          <div class="setting-row">
+            <div class="setting-label"><span data-i18n="settings.account"></span></div>
+            <strong id="s-user" class="s-value">—</strong>
+          </div>
+          <button id="btn-reload" class="big-btn wide" data-i18n="reload"></button>
+          <button id="btn-unlink" class="big-btn wide danger" data-i18n="unlink"></button>
+        </div>
+
+        <div class="s-panel" data-panel="about">
+          <h2 class="s-panel-title" data-i18n="settings.sec.about"></h2>
+          <div class="about">
+            <div class="about-app"><img src="__BASE__/static/icon.svg" alt=""><strong>ABS Car</strong> <span class="muted">v__VERSION__</span></div>
+            <p data-i18n="about.unofficial"></p>
+            <p data-i18n="about.abs"></p>
+            <p><span data-i18n="about.source"></span> github.com/crazystress/abs-car</p>
+            <p class="muted" data-i18n="about.trademarks"></p>
+          </div>
+          <div class="diag">
+            <div class="diag-title" data-i18n="diag.title"></div>
+            <div><span data-i18n="diag.theme"></span> <strong id="diag-theme">—</strong></div>
+            <div id="diag-theme-log" class="diag-log"></div>
+            <div id="diag-ua" class="diag-ua"></div>
+          </div>
         </div>
       </div>
-      <div class="setting-row">
-        <div class="setting-label"><span data-i18n="settings.skipBack"></span></div>
-        <div class="segmented">
-          <button data-skip-back="10">10 s</button>
-          <button data-skip-back="15">15 s</button>
-          <button data-skip-back="30">30 s</button>
-          <button data-skip-back="60">60 s</button>
-        </div>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label"><span data-i18n="settings.skipFwd"></span></div>
-        <div class="segmented">
-          <button data-skip-fwd="10">10 s</button>
-          <button data-skip-fwd="15">15 s</button>
-          <button data-skip-fwd="30">30 s</button>
-          <button data-skip-fwd="60">60 s</button>
-        </div>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">
-          <span data-i18n="settings.rewind"></span>
-          <small data-i18n="settings.rewindHint"></small>
-        </div>
-        <div class="segmented">
-          <button data-rewind="on" data-i18n="on"></button>
-          <button data-rewind="off" data-i18n="off"></button>
-        </div>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">
-          <span data-i18n="settings.failLabel"></span>
-          <small data-i18n="settings.failHint"></small>
-        </div>
-        <div class="stepper">
-          <button id="fail-minus" class="ctrl stepper-btn" data-i18n-aria="aria.less">−</button>
-          <span id="fail-value" class="stepper-value">4</span>
-          <button id="fail-plus" class="ctrl stepper-btn" data-i18n-aria="aria.more">+</button>
-        </div>
-      </div>
-      <div class="diag">
-        <div class="diag-title" data-i18n="diag.title"></div>
-        <div><span data-i18n="diag.theme"></span> <strong id="diag-theme">—</strong></div>
-        <div id="diag-theme-log" class="diag-log"></div>
-        <div id="diag-ua" class="diag-ua"></div>
-      </div>
-      <div class="about">
-        <div class="diag-title" data-i18n="about.title"></div>
-        <div class="about-app"><img src="__BASE__/static/icon.svg" alt=""><strong>ABS Car</strong> <span class="muted">v__VERSION__</span></div>
-        <p data-i18n="about.unofficial"></p>
-        <p data-i18n="about.abs"></p>
-        <p><span data-i18n="about.source"></span> github.com/crazystress/abs-car</p>
-        <p class="muted" data-i18n="about.trademarks"></p>
-      </div>
-      <button id="btn-reload" class="big-btn wide" data-i18n="reload"></button>
-      <button id="btn-unlink" class="big-btn wide danger" data-i18n="unlink"></button>
     </div>
-  </div>
+  </section>
 
   <!-- Estado de la sincronización (arriba a la derecha) -->
   <div id="sync-status" class="sync-status" hidden>

@@ -44,6 +44,48 @@ function saveStore() {
   return saveChain;
 }
 
+// ---------- Datos enviados a cada coche (bytes reales que salen de este servidor) ----------
+// device.usage = { day, today, month, thisMonth, total }
+const localDay = () => new Date().toLocaleDateString('sv-SE'); // AAAA-MM-DD en la zona horaria del contenedor (TZ)
+let usageDirty = false;
+
+function addUsage(device, bytes) {
+  if (!bytes) return;
+  const u = (device.usage ||= { day: '', today: 0, month: '', thisMonth: 0, total: 0 });
+  const day = localDay(), month = day.slice(0, 7);
+  if (u.day !== day) { u.day = day; u.today = 0; }
+  if (u.month !== month) { u.month = month; u.thisMonth = 0; }
+  u.today += bytes;
+  u.thisMonth += bytes;
+  u.total += bytes;
+  usageDirty = true;
+}
+
+function usageOf(device) {
+  const u = device.usage || {};
+  const day = localDay();
+  return {
+    today: u.day === day ? u.today : 0,
+    month: u.month === day.slice(0, 7) ? u.thisMonth : 0,
+    total: u.total || 0,
+  };
+}
+
+// Cuenta lo que se escribe en la respuesta (incluido lo que llega por pipe desde Audiobookshelf)
+function countResponse(res, device) {
+  const { write, end } = res;
+  const size = (chunk, enc) => (chunk ? (typeof chunk === 'string' ? Buffer.byteLength(chunk, typeof enc === 'string' ? enc : 'utf8') : chunk.length) : 0);
+  res.write = function (chunk, enc, cb) { addUsage(device, size(chunk, enc)); return write.call(this, chunk, enc, cb); };
+  res.end = function (chunk, enc, cb) { if (typeof chunk !== 'function') addUsage(device, size(chunk, enc)); return end.call(this, chunk, enc, cb); };
+}
+
+// Guardar los contadores como mucho cada 30 s (no en cada trozo de audio)
+setInterval(() => {
+  if (!usageDirty) return;
+  usageDirty = false;
+  saveStore();
+}, 30_000).unref();
+
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const randomToken = () => crypto.randomBytes(32).toString('base64url');
 
@@ -335,6 +377,7 @@ async function handle(req, res) {
 
   const cookies = parseCookies(req);
   const device = findDeviceByToken(cookies[DEVICE_COOKIE]);
+  if (device && !device.invalid) countResponse(res, device);
 
   // Páginas
   if (req.method === 'GET' && p === '/') return serveFile(res, 'index.html');
@@ -353,7 +396,22 @@ async function handle(req, res) {
       device.lastSeen = Date.now();
       saveStore();
     }
-    return sendJson(res, 200, { paired: true, name: device.name, username: device.username, deviceId: device.id });
+    return sendJson(res, 200, { paired: true, name: device.name, username: device.username, deviceId: device.id, usage: usageOf(device) });
+  }
+
+  // Coche: cambiar su propio nombre (solo con su cookie; JSON para evitar envíos desde formularios ajenos)
+  if (req.method === 'POST' && p === '/me') {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'not_paired' });
+    if (!String(req.headers['content-type'] || '').includes('application/json')) return sendJson(res, 415, { error: 'invalid_name' });
+    const { name } = await readJson(req);
+    const clean = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!clean) return sendJson(res, 400, { error: 'invalid_name' });
+    if (clean !== device.name) {
+      console.log(`[me] "${device.name}" renombrado a "${clean}"`);
+      device.name = clean;
+      await saveStore();
+    }
+    return sendJson(res, 200, { ok: true, name: device.name });
   }
 
   // Coche: pedir un código
@@ -448,6 +506,22 @@ async function handle(req, res) {
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie(DEVICE_COOKIE, '', 0) });
   }
 
+  // Estadísticas de escucha de un libro: el servidor suma las sesiones para no mandar al coche
+  // la lista entera (cada sesión de Audiobookshelf trae muchos datos)
+  const statsMatch = req.method === 'GET' && p.match(/^\/stats\/([\w-]+)$/);
+  if (statsMatch) {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
+    const r = await absFetch(device, `/api/me/item/listening-sessions/${statsMatch[1]}?itemsPerPage=100000`);
+    if (!r.ok) return sendJson(res, r.status === 404 ? 404 : 502, { error: 'abs_error' });
+    const { total, sessions = [] } = await r.json();
+    let listened = 0, firstStartedAt = 0;
+    for (const sess of sessions) {
+      listened += Number(sess.timeListening) || 0;
+      if (sess.startedAt && (!firstStartedAt || sess.startedAt < firstStartedAt)) firstStartedAt = sess.startedAt;
+    }
+    return sendJson(res, 200, { sessions: total ?? sessions.length, listened: Math.round(listened), firstStartedAt: firstStartedAt || null });
+  }
+
   // Proxy a Audiobookshelf
   if (p.startsWith('/abs/')) {
     if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
@@ -474,7 +548,7 @@ server.listen(PORT, () => {
 for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {
     server.close();
-    await saveChain;
+    await (usageDirty ? saveStore() : saveChain); // no perder los últimos contadores de datos
     process.exit(0);
   });
 }

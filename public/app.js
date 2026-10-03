@@ -55,6 +55,7 @@ function show(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
 }
 
+const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const coverUrl = (id) => `${ABS}/api/items/${id}/cover?width=600`;
 const metaOf = (item) => item?.media?.metadata || {};
 const authorOf = (item) => {
@@ -64,7 +65,7 @@ const authorOf = (item) => {
 
 class RelinkError extends Error {}
 
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, onResponse } = {}) {
   const res = await fetch(ABS + path, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
@@ -78,6 +79,7 @@ async function api(path, { method = 'GET', body } = {}) {
       throw new RelinkError();
     }
   }
+  onResponse?.(res);
   if (!res.ok) {
     const err = new Error(`HTTP ${res.status}`);
     err.status = res.status;
@@ -176,6 +178,119 @@ function card(item, { seq } = {}) {
   return el;
 }
 
+// ---------- Datos consumidos (bytes reales que el servidor ha enviado a este coche) ----------
+function fmtBytes(n) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
+  const num = i < 2 ? Math.round(n) : Math.round(n * 10) / 10; // B y KB enteros; MB y GB con un decimal
+  return `${num.toLocaleString(getLang())} ${units[i]}`;
+}
+
+async function renderSettingsUsage() {
+  let u = { today: 0, month: 0, total: 0 };
+  try {
+    const d = await (await fetch(BASE + '/me')).json();
+    if (d.usage) u = d.usage;
+  } catch {}
+  $('s-usage').innerHTML = [['usage.today', u.today], ['usage.month', u.month], ['usage.total', u.total]]
+    .map(([k, n]) => `<span>${escapeHtml(t(k))}</span><b>${escapeHtml(fmtBytes(n))}</b>`).join('');
+}
+
+// ---------- Audio descargado por adelantado (dato real del reproductor del navegador) ----------
+const showBuffer = () => store('bufferShow') !== false; // visible por defecto
+let bufferPaintedAt = 0;
+
+// Segundos de escucha ya descargados por delante (a la velocidad actual), dentro de la pista actual.
+// Con MP4/M4B el navegador informa a veces de lo descargado en tramos separados por huecos de pocos
+// segundos justo delante de la posición: se tratan como continuos.
+const BUFFER_GAP_S = 30;
+function bufferedAhead() {
+  const now = audio.currentTime, b = audio.buffered;
+  let end = -1;
+  for (let i = 0; i < b.length; i++) {
+    if (end < 0) {
+      if (b.start(i) <= now + 0.5 && now <= b.end(i)) end = b.end(i);
+    } else if (b.start(i) - end <= BUFFER_GAP_S) end = Math.max(end, b.end(i));
+    else break;
+  }
+  return end < 0 ? 0 : (end - now) / (audio.playbackRate || 1);
+}
+
+// Franja más clara en la barra del capítulo: desde el inicio hasta donde llega lo ya descargado
+function paintBuffer(force) {
+  if (!force && Date.now() - bufferPaintedAt < 1000) return; // como mucho una vez por segundo
+  bufferPaintedAt = Date.now();
+  const el = $('p-seek-buffer');
+  const ch = P.chapters.length ? P.chapters[chapterIndexAt(currentTime())] : null;
+  if (!showBuffer() || !P.itemId || audio.readyState === 0) return void (el.style.width = '0');
+  const start = ch ? ch.start : 0, end = ch ? ch.end : P.duration;
+  const loadedTo = currentTime() + bufferedAhead() * (audio.playbackRate || 1); // en tiempo del libro
+  const frac = Math.min(1, Math.max(0, (loadedTo - start) / (end - start || 1)));
+  el.style.width = (frac * 100).toFixed(2) + '%';
+}
+
+function renderBufferPicker() {
+  document.querySelectorAll('[data-buffer-show]').forEach((b) => b.classList.toggle('active', (b.dataset.bufferShow === 'on') === showBuffer()));
+}
+
+// ---------- Datos de escucha del libro en «Continuar» ----------
+const showHeroStats = () => store('heroStats') !== false; // visible por defecto
+const STAT_ICONS = {
+  started: 'M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Z',
+  sessions: 'M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9Z',
+  listened: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5Z',
+};
+let heroStats = { id: null, data: null };
+
+function fmtDay(ms) {
+  const d = new Date(ms), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return t('stats.today');
+  if (diff === 1) return t('stats.yesterday');
+  const opts = { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) };
+  return d.toLocaleDateString(getLang(), opts).replace('.', '');
+}
+
+function fmtListened(sec) {
+  const min = Math.floor(sec / 60);
+  if (min < 1) return '< 1 min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+}
+
+function paintHeroStats() {
+  const el = $('hero-stats');
+  const { id, data } = heroStats;
+  const startedAt = progressById[id]?.startedAt || data?.firstStartedAt;
+  const parts = [];
+  const bold = (v) => `<b>${escapeHtml(v)}</b>`;
+  if (startedAt) parts.push(['started', t('stats.started', { date: bold(fmtDay(startedAt)) })]);
+  if (data?.sessions) parts.push(['sessions', t(data.sessions === 1 ? 'stats.sessions.one' : 'stats.sessions', { n: bold(String(data.sessions)) })]);
+  if (data?.listened >= 60) parts.push(['listened', t('stats.listened', { time: bold(fmtListened(data.listened)) })]);
+  el.innerHTML = parts.map(([k, html]) => `<span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${STAT_ICONS[k]}"/></svg>${html}</span>`).join('');
+  el.hidden = !showHeroStats() || !parts.length;
+}
+
+async function renderHeroStats(id) {
+  if (heroStats.id !== id) heroStats = { id, data: null };
+  paintHeroStats(); // la fecha de inicio ya viene con el progreso; sesiones y tiempo llegan después
+  if (!showHeroStats()) return;
+  try {
+    const res = await fetch(`${BASE}/stats/${encodeURIComponent(id)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (heroStats.id !== id) return; // cambió el libro mientras tanto
+    heroStats.data = data;
+    paintHeroStats();
+  } catch {}
+}
+
+function renderHeroStatsPicker() {
+  document.querySelectorAll('[data-hero-stats]').forEach((b) => b.classList.toggle('active', (b.dataset.heroStats === 'on') === showHeroStats()));
+}
+
 async function loadHome() {
   try {
     await loadProgress();
@@ -190,6 +305,7 @@ async function loadHome() {
       $('hero-author').textContent = authorOf(first);
       $('hero-progress').innerHTML = progressRow(progressById[first.id]?.progress);
       $('hero').onclick = () => openItem(first.id, { title: metaOf(first).title, author: authorOf(first) });
+      renderHeroStats(first.id);
     }
     $('continue-grid').replaceChildren(...rest.map(card));
     $('continue-empty').hidden = books.length > 0;
@@ -1067,9 +1183,12 @@ function showSyncStatus(kind) {
   }
 }
 
+let lastSyncOk = 0; // hora de la última sincronización correcta (se muestra en Ajustes)
 function syncSucceeded() {
   syncFailures = 0;
+  lastSyncOk = Date.now();
   showSyncStatus('ok');
+  if ($('view-settings').classList.contains('active')) renderLastSync();
 }
 
 function syncFailed() {
@@ -1274,6 +1393,8 @@ audio.addEventListener('pause', () => {
   syncNow();
 });
 audio.addEventListener('timeupdate', render);
+audio.addEventListener('timeupdate', () => paintBuffer());
+for (const ev of ['progress', 'seeked', 'pause', 'play', 'ratechange', 'loadedmetadata', 'emptied']) audio.addEventListener(ev, () => paintBuffer(true));
 audio.addEventListener('ended', () => {
   if (P.trackIdx < P.tracks.length - 1) {
     loadTrack(P.trackIdx + 1, 0, true);
@@ -1590,16 +1711,120 @@ function updateMediaMetadata(ch) {
   });
 }
 
-// ---------- Ajustes ----------
-$('btn-settings').onclick = () => {
-  $('settings-info').textContent = t('settings.info', { name: me?.name || t('link.defaultName'), user: me?.username || '?' });
+// ---------- Ajustes: página con secciones ----------
+const SETTINGS_SECTIONS = ['playback', 'appearance', 'sync', 'car', 'about'];
+const settingsNarrow = window.matchMedia('(max-width: 900px)'); // menú y sección en pantallas separadas
+const settings = { from: 'home', open: false };
+
+function currentSection() {
+  const s = store('settingsSection');
+  return SETTINGS_SECTIONS.includes(s) ? s : 'playback';
+}
+
+function openSettings() {
+  settings.from = document.querySelector('.view.active')?.id.replace('view-', '') || 'home';
+  // En pantalla estrecha se entra por la lista de secciones; en ancha, directo a la última usada
+  settings.open = !settingsNarrow.matches;
+  renderSettings();
+  show('settings');
+}
+
+function selectSection(sec) {
+  store('settingsSection', sec);
+  settings.open = true;
+  renderSettings();
+  $('s-layout').querySelector('.s-panels').scrollTop = 0;
+}
+
+function renderSettings() {
+  const sec = currentSection();
+  document.querySelectorAll('.s-nav-item').forEach((b) => b.classList.toggle('active', b.dataset.sec === sec));
+  document.querySelectorAll('.s-panel').forEach((el) => (el.hidden = el.dataset.panel !== sec));
+  const detail = settingsNarrow.matches && settings.open;
+  $('s-layout').classList.toggle('narrow', settingsNarrow.matches);
+  $('s-layout').classList.toggle('detail', detail);
+  $('s-back').textContent = '‹ ' + t(detail ? 'settings.title' : 'settings.back');
   $('fail-value').textContent = syncFailThreshold();
-  $('sheet-settings').hidden = false;
+  $('s-user').textContent = me?.username || '?';
+  if (document.activeElement !== $('s-name')) $('s-name').value = me?.name || '';
+  updateNameSave();
+  renderLastSync();
+  if (sec === 'sync') renderSettingsUsage();
+}
+
+function renderLastSync() {
+  $('s-last-sync').textContent = lastSyncOk ? new Date(lastSyncOk).toTimeString().slice(0, 5) : t('settings.never');
+}
+
+function updateNameSave() {
+  const v = $('s-name').value.trim();
+  $('s-name-save').disabled = !v || v === me?.name;
+}
+
+$('btn-settings').onclick = openSettings;
+$('s-back').onclick = () => {
+  if (settingsNarrow.matches && settings.open) {
+    settings.open = false;
+    renderSettings();
+  } else show(settings.from);
 };
+document.querySelectorAll('.s-nav-item').forEach((b) => (b.onclick = () => selectSection(b.dataset.sec)));
+{
+  const onResize = () => $('view-settings').classList.contains('active') && renderSettings();
+  settingsNarrow.addEventListener ? settingsNarrow.addEventListener('change', onResize) : settingsNarrow.addListener(onResize);
+}
+
+// Nombre del coche: se guarda en el servidor (aparece en las sesiones y marcadores de Audiobookshelf)
+$('s-name').addEventListener('input', updateNameSave);
+$('s-name-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('s-name').value.trim();
+  if (!name || name === me?.name) return;
+  $('s-name-save').disabled = true;
+  try {
+    const res = await fetch(BASE + '/me', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (me) me.name = data.name;
+    $('s-name').value = data.name;
+    $('s-name').blur();
+    toast(t('settings.saved'));
+  } catch {
+    toast(t('settings.saveError'));
+  }
+  updateNameSave();
+};
+// ---------- Tamaño de las carátulas (ancho mínimo de columna en las cuadrículas) ----------
+const COVER_MIN = 170, COVER_MAX = 350, COVER_STEP = 20, COVER_DEFAULT = 230;
+
+function coverSize() {
+  const n = Number(store('coverSize'));
+  return n >= COVER_MIN && n <= COVER_MAX ? n : COVER_DEFAULT;
+}
+
+function applyCoverSize() {
+  const n = coverSize();
+  document.documentElement.style.setProperty('--cover-min', n + 'px');
+  // Letra de las tarjetas: crece y mengua con la carátula, algo amortiguada para que no quede ni diminuta ni enorme
+  document.documentElement.style.setProperty('--cover-scale', (1 + (n / COVER_DEFAULT - 1) * 0.7).toFixed(3));
+  $('cover-value').textContent = n;
+  $('cover-minus').disabled = n <= COVER_MIN;
+  $('cover-plus').disabled = n >= COVER_MAX;
+  // Cuántas caben por fila en esta pantalla (cuadrícula con 28 px de margen lateral y de hueco)
+  const perRow = Math.max(1, Math.floor((window.innerWidth - 56 + 28) / (n + 28)));
+  $('s-cover-hint').textContent = t('settings.coverSizeHint', { n: perRow });
+}
+
+$('cover-minus').onclick = () => { store('coverSize', Math.max(COVER_MIN, coverSize() - COVER_STEP)); applyCoverSize(); };
+$('cover-plus').onclick = () => { store('coverSize', Math.min(COVER_MAX, coverSize() + COVER_STEP)); applyCoverSize(); };
+window.addEventListener('resize', applyCoverSize);
+document.addEventListener('langchange', applyCoverSize);
+applyCoverSize();
+
 // ---------- Tema: auto (sigue al coche) | light | dark ----------
 function currentTheme() {
   const t = store('theme');
-  return ['auto', 'light', 'dark'].includes(t) ? t : 'auto';
+  return ['auto', 'light', 'dark', 'black'].includes(t) ? t : 'auto';
 }
 
 function applyTheme() {
@@ -1608,7 +1833,7 @@ function applyTheme() {
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.classList.toggle('active', b.dataset.themeOpt === mode));
   // Color de la barra del navegador, según el tema efectivo
   const light = mode === 'light' || (mode === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f2f2f5' : '#0b0b0d');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f2f2f5' : mode === 'black' ? '#000000' : '#0b0b0d');
 }
 
 document.querySelectorAll('[data-theme-opt]').forEach((b) => {
@@ -1622,6 +1847,20 @@ document.querySelectorAll('[data-theme-opt]').forEach((b) => {
   mq.addEventListener ? mq.addEventListener('change', applyTheme) : mq.addListener(applyTheme);
 }
 applyTheme();
+
+// Fondo del reproductor: carátula difuminada (por defecto) o liso, del color del tema
+const playerBgPlain = () => store('playerBg') === 'plain';
+function applyPlayerBg() {
+  document.body.classList.toggle('plain-bg', playerBgPlain());
+  document.querySelectorAll('[data-player-bg]').forEach((b) => b.classList.toggle('active', (b.dataset.playerBg === 'plain') === playerBgPlain()));
+}
+document.querySelectorAll('[data-player-bg]').forEach((b) => {
+  b.onclick = () => {
+    store('playerBg', b.dataset.playerBg);
+    applyPlayerBg();
+  };
+});
+applyPlayerBg();
 
 // Diagnóstico: ¿el navegador del coche expone el tema claro/oscuro? (prefers-color-scheme)
 (function themeDiagnostic() {
@@ -1667,6 +1906,22 @@ document.querySelectorAll('[data-rewind]').forEach((b) => {
     renderRewindPicker();
   };
 });
+document.querySelectorAll('[data-hero-stats]').forEach((b) => {
+  b.onclick = () => {
+    store('heroStats', b.dataset.heroStats === 'on');
+    renderHeroStatsPicker();
+    if (heroStats.id) renderHeroStats(heroStats.id);
+  };
+});
+document.querySelectorAll('[data-buffer-show]').forEach((b) => {
+  b.onclick = () => {
+    store('bufferShow', b.dataset.bufferShow === 'on');
+    renderBufferPicker();
+    paintBuffer(true);
+  };
+});
+renderBufferPicker();
+renderHeroStatsPicker();
 renderSkipButtons();
 renderRewindPicker();
 document.addEventListener('langchange', renderSkipButtons);
@@ -1680,7 +1935,6 @@ $('btn-unlink').onclick = async () => {
   await fetch(BASE + '/logout', { method: 'POST' });
   P.itemId = null;
   $('mini').hidden = true;
-  $('sheet-settings').hidden = true;
   startPairing();
 };
 document.querySelectorAll('.sheet').forEach((sheet) => {
@@ -1729,9 +1983,8 @@ document.querySelectorAll('.sheet').forEach((sheet) => {
     }
     P.chapterLabel = null;
     render();
-    if (!$('sheet-settings').hidden) {
-      $('settings-info').textContent = t('settings.info', { name: me?.name || t('link.defaultName'), user: me?.username || '?' });
-    }
+    if ($('view-settings').classList.contains('active')) renderSettings();
+    if (heroStats.id) paintHeroStats();
     if (!$('sync-status').hidden) $('sync-text').textContent = t($('sync-status').classList.contains('fail') ? 'sync.fail' : 'sync.ok', { time: new Date().toTimeString().slice(0, 5) });
   });
 })();
