@@ -6,6 +6,10 @@
 
 <p align="center"><em>Audiobookshelf for my Car</em></p>
 
+<p align="center">
+  <img src="docs/screenshots/player.jpg" width="880" alt="ABS Car player on a car touchscreen: big playback controls, chapter progress and the book cover">
+</p>
+
 > **Requirement:** you need your own [Audiobookshelf](https://www.audiobookshelf.org) server.
 > ABS Car is only a client/player: your books, progress and account live on your
 > Audiobookshelf server. Without it, this app can't be used. This is an **unofficial** client,
@@ -35,6 +39,23 @@ It works in any modern web browser, so you can also use it on tablets, phones an
 > Tesla and BYD are trademarks of their respective owners. They are mentioned only to describe
 > compatibility. ABS Car is not affiliated with, endorsed by or sponsored by Tesla, BYD or any
 > other car maker.
+
+## Screenshots
+
+| Continue listening | Library |
+|---|---|
+| ![Home screen with the books in progress](docs/screenshots/home.jpg) | ![Library grid with covers, progress and search](docs/screenshots/library.jpg) |
+| **Series** | **Chapters** |
+| ![Series view in reading order with an "Up next" button](docs/screenshots/series.jpg) | ![Chapter list with the current chapter highlighted](docs/screenshots/chapters.png) |
+| **Light theme** | **Pairing the car** |
+| ![Player in the light theme](docs/screenshots/player-light.jpg) | ![Pairing screen with a short code and a QR code](docs/screenshots/pairing.png) |
+
+<p align="center">
+  <img src="docs/screenshots/phone-pairing.png" width="280" alt="Phone page to pair the car with your Audiobookshelf account">
+</p>
+
+<sub>Screenshots from a demo server using public-domain books and public-domain cover images
+from Wikimedia Commons. See [credits](docs/screenshots/CREDITS.md).</sub>
 
 ## Features
 
