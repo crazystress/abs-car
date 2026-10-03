@@ -665,12 +665,6 @@ body.plain-bg .player-bg { display: none; } /* Ajustes → Apariencia → Fondo 
 .grid:not(.list-mode) .author-badge svg { width: calc(18px * var(--cs)); height: calc(18px * var(--cs)); }
 .grid:not(.list-mode) .author-initials { font-size: calc(56px * var(--cs)); }
 
-/* Datos consumidos en el reproductor: bajo la carátula (ancha) o bajo los tiempos (estrecha) */
-.p-usage { flex: none; display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 19px; color: var(--text-2); }
-.p-usage svg { width: 22px; height: 22px; color: var(--accent); flex: none; }
-.p-usage b { color: var(--text); font-weight: 700; }
-.p-info { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; }
-.player-main .p-info { justify-content: flex-start; margin-top: 4px; }
 
 .s-usage { display: grid; grid-template-columns: auto auto; gap: 4px 20px; font-size: 22px; color: var(--text-2); text-align: right; flex: none; }
 .s-usage b { color: var(--text); font-size: 26px; font-variant-numeric: tabular-nums; }

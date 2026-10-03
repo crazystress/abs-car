@@ -45,63 +45,26 @@ function saveStore() {
 }
 
 // ---------- Datos enviados a cada coche (bytes reales que salen de este servidor) ----------
-// device.usage = { day, today, month, thisMonth, total, session }; «session» se reinicia al abrir un libro (/play)
+// device.usage = { day, today, month, thisMonth, total }
 const localDay = () => new Date().toLocaleDateString('sv-SE'); // AAAA-MM-DD en la zona horaria del contenedor (TZ)
 let usageDirty = false;
 
-function addUsage(device, bytes, silent = false) {
+function addUsage(device, bytes) {
   if (!bytes) return;
-  const u = (device.usage ||= { day: '', today: 0, month: '', thisMonth: 0, total: 0, session: 0 });
+  const u = (device.usage ||= { day: '', today: 0, month: '', thisMonth: 0, total: 0 });
   const day = localDay(), month = day.slice(0, 7);
   if (u.day !== day) { u.day = day; u.today = 0; }
   if (u.month !== month) { u.month = month; u.thisMonth = 0; }
   u.today += bytes;
   u.thisMonth += bytes;
   u.total += bytes;
-  u.session += bytes;
   usageDirty = true;
-  if (!silent) notifyUsage(device);
-}
-
-// Contador en directo para el reproductor (server-sent events): se envía cuando cambia, como mucho
-// cada 2 s; si el navegador no descarga nada, no viaja nada (salvo un aviso cada 25 s para Cloudflare)
-const usageStreams = new Map(); // device.id → Set(res)
-const usageTimers = new Map();
-function notifyUsage(device) {
-  if (!usageStreams.get(device.id)?.size || usageTimers.has(device.id)) return;
-  usageTimers.set(device.id, setTimeout(() => {
-    usageTimers.delete(device.id);
-    for (const r of usageStreams.get(device.id) || []) sendEvent(r, device, `data: ${JSON.stringify(usageOf(device))}\n\n`);
-  }, 2000));
-}
-// Lo enviado por este canal también cuenta como consumo, pero sin provocar otro aviso (si no, se
-// realimentaría cada 2 s)
-function sendEvent(res, device, text) {
-  addUsage(device, Buffer.byteLength(text), true);
-  res.write(text);
-}
-function openUsageStream(req, res, device) {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    'X-Accel-Buffering': 'no',
-    Connection: 'keep-alive',
-  });
-  const set = usageStreams.get(device.id) || new Set();
-  usageStreams.set(device.id, set.add(res));
-  sendEvent(res, device, `retry: 5000\ndata: ${JSON.stringify(usageOf(device))}\n\n`);
-  const ping = setInterval(() => sendEvent(res, device, ': ping\n\n'), 25_000);
-  req.on('close', () => {
-    clearInterval(ping);
-    set.delete(res);
-  });
 }
 
 function usageOf(device) {
   const u = device.usage || {};
   const day = localDay();
   return {
-    session: u.session || 0,
     today: u.day === day ? u.today : 0,
     month: u.month === day.slice(0, 7) ? u.thisMonth : 0,
     total: u.total || 0,
@@ -359,7 +322,6 @@ async function proxy(req, res, device, absPath, search) {
     body = await readBody(req);
     // Identificar el coche en las sesiones de escucha de Audiobookshelf
     if (/\/play(\/[\w-]+)?$/.test(absPath)) {
-      if (device.usage) device.usage.session = 0; // nuevo libro abierto: empieza el contador de esta sesión
       let json = {};
       try { json = JSON.parse(body.toString() || '{}'); } catch {}
       json.deviceInfo = {
@@ -395,8 +357,6 @@ async function proxy(req, res, device, absPath, search) {
     const v = upstream.headers.get(h);
     if (v) outHeaders[h] = v;
   }
-  // En cada sincronización (cada 15 s mientras suena) van los contadores de datos: sin peticiones extra
-  if (/^\/api\/session\/[\w-]+\/sync$/.test(absPath)) outHeaders['x-car-usage'] = JSON.stringify(usageOf(device));
   res.writeHead(upstream.status, outHeaders);
   if (!upstream.body) return res.end();
   Readable.fromWeb(upstream.body).on('error', () => res.destroy()).pipe(res);
@@ -417,11 +377,6 @@ async function handle(req, res) {
 
   const cookies = parseCookies(req);
   const device = findDeviceByToken(cookies[DEVICE_COOKIE]);
-  // Canal en directo del contador de datos (cuenta sus propios bytes aparte, sin realimentarse)
-  if (req.method === 'GET' && p === '/usage/stream') {
-    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
-    return openUsageStream(req, res, device);
-  }
   if (device && !device.invalid) countResponse(res, device);
 
   // Páginas

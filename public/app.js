@@ -53,7 +53,6 @@ function toast(msg) {
 
 function show(view) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
-  updateUsageStream();
 }
 
 const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -180,10 +179,6 @@ function card(item, { seq } = {}) {
 }
 
 // ---------- Datos consumidos (bytes reales que el servidor ha enviado a este coche) ----------
-const USAGE_ICON = 'M16 6h3v14h-3zM10.5 10h3v10h-3zM5 14h3v6H5z';
-const showUsage = () => store('usageShow') !== false; // visible por defecto
-let usage = null; // { session, today, month, total } en bytes
-
 function fmtBytes(n) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
@@ -192,56 +187,15 @@ function fmtBytes(n) {
   return `${num.toLocaleString(getLang())} ${units[i]}`;
 }
 
-function setUsage(header) {
-  if (!header) return;
-  try { usage = JSON.parse(header); } catch { return; }
-  paintUsage();
-}
-
-function paintUsage() {
-  const el = $('p-usage');
-  el.hidden = !showUsage() || !usage;
-  if (el.hidden) return;
-  const b = (n) => `<b>${escapeHtml(fmtBytes(n))}</b>`;
-  el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${USAGE_ICON}"/></svg><span>${t('usage.line', { session: b(usage.session), today: b(usage.today) })}</span>`;
-}
-
-// Con el reproductor en pantalla, el servidor manda el contador cuando cambia (server-sent events)
-let usageSource = null;
-function updateUsageStream() {
-  const want = typeof EventSource === 'function' && showUsage() && !!P.itemId && document.visibilityState === 'visible'
-    && $('view-player').classList.contains('active');
-  if (want && !usageSource) {
-    usageSource = new EventSource(BASE + '/usage/stream');
-    usageSource.onmessage = (e) => setUsage(e.data);
-  } else if (!want && usageSource) {
-    usageSource.close();
-    usageSource = null;
-  }
-}
-document.addEventListener('visibilitychange', updateUsageStream);
-
 async function renderSettingsUsage() {
+  let u = { today: 0, month: 0, total: 0 };
   try {
     const d = await (await fetch(BASE + '/me')).json();
-    if (d.usage) usage = { ...usage, ...d.usage, session: usage?.session ?? d.usage.session };
+    if (d.usage) u = d.usage;
   } catch {}
-  const u = usage || { today: 0, month: 0, total: 0 };
   $('s-usage').innerHTML = [['usage.today', u.today], ['usage.month', u.month], ['usage.total', u.total]]
     .map(([k, n]) => `<span>${escapeHtml(t(k))}</span><b>${escapeHtml(fmtBytes(n))}</b>`).join('');
 }
-
-function renderUsagePicker() {
-  document.querySelectorAll('[data-usage-show]').forEach((b) => b.classList.toggle('active', (b.dataset.usageShow === 'on') === showUsage()));
-}
-
-// En pantalla estrecha la columna de la carátula no se ve: el dato va bajo los tiempos del capítulo
-(function placeUsage() {
-  const narrow = window.matchMedia('(max-width: 1100px)');
-  const place = () => (narrow.matches ? document.querySelector('.player-main .times') : document.querySelector('.player-cover')).after($('p-info'));
-  place();
-  narrow.addEventListener ? narrow.addEventListener('change', place) : narrow.addListener(place);
-})();
 
 // ---------- Audio descargado por adelantado (dato real del reproductor del navegador) ----------
 const showBuffer = () => store('bufferShow') !== false; // visible por defecto
@@ -1156,8 +1110,6 @@ async function openItem(itemId, hint = {}) {
 }
 
 async function startSession(autoplay) {
-  if (usage) { usage.session = 0; paintUsage(); } // el servidor reinicia el contador de la sesión al abrir el libro
-  updateUsageStream();
   const s = await api(`/api/items/${P.itemId}/play`, {
     method: 'POST',
     body: {
@@ -1254,7 +1206,6 @@ async function syncNow() {
     await api(`/api/session/${P.sessionId}/sync`, {
       method: 'POST',
       body: { currentTime: t, timeListened: listened, duration: P.duration },
-      onResponse: (r) => setUsage(r.headers.get('x-car-usage')),
     });
     P.listened = Math.max(0, P.listened - listened);
     P.lastSync = Date.now();
@@ -1962,10 +1913,6 @@ document.querySelectorAll('[data-hero-stats]').forEach((b) => {
     if (heroStats.id) renderHeroStats(heroStats.id);
   };
 });
-document.querySelectorAll('[data-usage-show]').forEach((b) => {
-  b.onclick = () => {
-    store('usageShow', b.dataset.usageShow === 'on');
-    renderUsagePicker();
 document.querySelectorAll('[data-buffer-show]').forEach((b) => {
   b.onclick = () => {
     store('bufferShow', b.dataset.bufferShow === 'on');
@@ -1974,12 +1921,6 @@ document.querySelectorAll('[data-buffer-show]').forEach((b) => {
   };
 });
 renderBufferPicker();
-    paintUsage();
-    updateUsageStream();
-    paintBuffer(true);
-  };
-});
-renderUsagePicker();
 renderHeroStatsPicker();
 renderSkipButtons();
 renderRewindPicker();
@@ -2044,7 +1985,6 @@ document.querySelectorAll('.sheet').forEach((sheet) => {
     render();
     if ($('view-settings').classList.contains('active')) renderSettings();
     if (heroStats.id) paintHeroStats();
-    paintUsage();
     if (!$('sync-status').hidden) $('sync-text').textContent = t($('sync-status').classList.contains('fail') ? 'sync.fail' : 'sync.ok', { time: new Date().toTimeString().slice(0, 5) });
   });
 })();

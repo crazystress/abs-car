@@ -30,7 +30,8 @@ while you drive.
 - **Large tap targets** that are easy to hit on a car screen, with no tiny menus.
 - **Landscape layouts** for wide dashboard screens, plus a narrower layout for smaller displays.
 - **Light, dark, black or automatic theme**, so the screen isn't blinding at night.
-- **Know your margin**: see how much audio is already loaded and how much mobile data you use.
+- **Know your margin**: see how much audio is already loaded, and check your mobile data use
+  in Settings.
 - **Pick up where you left off**: progress syncs with your Audiobookshelf server, so you can
   switch between the car, your phone and the web.
 - **Steering wheel and media controls** where the car's browser supports them (Media Session).
@@ -67,7 +68,6 @@ from Wikimedia Commons. See [credits](docs/screenshots/CREDITS.md).</sub>
     pause it goes back 3–30 s depending on how long it lasted.
   - **Audio loaded ahead** shown as a lighter band on the chapter bar, handy before tunnels
     and areas without signal.
-  - **Real data usage** for the session and the day, measured on the server.
   - **Blurred cover background** or a plain one.
 - **Continue listening** with listening stats for the current book: when you started it,
   number of sessions and time actually listened.
@@ -76,7 +76,8 @@ from Wikimedia Commons. See [credits](docs/screenshots/CREDITS.md).</sub>
 - **Progress sync** with Audiobookshelf, offline-tolerant and respectful of progress made on
   other devices, with a configurable warning after repeated sync failures.
 - **Settings page** organised in sections (Playback, Appearance, Sync, This car, About), with
-  an editable car name and data usage for today, this month and since pairing.
+  an editable car name and the data sent to the car today, this month and since pairing
+  (measured on the server).
 - **Light / dark / black (OLED, night) / auto theme**, **English, Spanish and French**, and an
   app icon for bookmarks and home screens.
 
@@ -93,7 +94,7 @@ Phone ──code + username/password──▶ /car/pair
 - The server stores the Audiobookshelf session token (never the password) and refreshes it
   automatically. The car only receives a cookie valid for one year.
 - All API calls and audio go through the built-in proxy, which only allows what the app needs.
-- The server also keeps, per car, the data usage counters shown in the app (in
+- The server also keeps, per car, the data usage counters shown in Settings (in
   `abs-car-data/store.json`). Nothing is sent anywhere else.
 - To unpair: ⚙️ Settings → "Unlink this car". You can also remove the car from
   `abs-car-data/store.json` and restart the container.
