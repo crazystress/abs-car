@@ -222,10 +222,41 @@ function renderUsagePicker() {
 // En pantalla estrecha la columna de la carátula no se ve: el dato va bajo los tiempos del capítulo
 (function placeUsage() {
   const narrow = window.matchMedia('(max-width: 1100px)');
-  const place = () => (narrow.matches ? document.querySelector('.player-main .times') : document.querySelector('.player-cover')).after($('p-usage'));
+  const place = () => (narrow.matches ? document.querySelector('.player-main .times') : document.querySelector('.player-cover')).after($('p-info'));
   place();
   narrow.addEventListener ? narrow.addEventListener('change', place) : narrow.addListener(place);
 })();
+
+// ---------- Audio cargado por adelantado (datos reales del reproductor del navegador) ----------
+const BUFFER_ICON = 'M5 20h14v-2H5v2Zm14-9h-4V3H9v8H5l7 7 7-7Z';
+const showBuffer = () => store('bufferShow') !== false; // visible por defecto
+let bufferPaintedAt = 0;
+
+// Segundos de escucha ya descargados por delante (a la velocidad actual), dentro de la pista actual
+function bufferedAhead() {
+  const now = audio.currentTime, b = audio.buffered;
+  for (let i = 0; i < b.length; i++) {
+    if (b.start(i) <= now + 0.5 && now <= b.end(i)) return (b.end(i) - now) / (audio.playbackRate || 1);
+  }
+  return 0;
+}
+
+function paintBuffer(force) {
+  const el = $('p-buffer');
+  if (!force && Date.now() - bufferPaintedAt < 1000) return; // como mucho una vez por segundo
+  bufferPaintedAt = Date.now();
+  el.hidden = !showBuffer() || !P.itemId || audio.readyState === 0;
+  if (el.hidden) return;
+  const ahead = bufferedAhead();
+  const sec = Math.floor(ahead);
+  const time = sec < 60 ? `${sec} s` : fmtListened(sec);
+  el.classList.toggle('low', !audio.paused && ahead < 60);
+  el.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${BUFFER_ICON}"/></svg><span>${t('buffer.line', { time: `<b>${escapeHtml(time)}</b>` })}</span>`;
+}
+
+function renderBufferPicker() {
+  document.querySelectorAll('[data-buffer-show]').forEach((b) => b.classList.toggle('active', (b.dataset.bufferShow === 'on') === showBuffer()));
+}
 
 // ---------- Datos de escucha del libro en «Continuar» ----------
 const showHeroStats = () => store('heroStats') !== false; // visible por defecto
@@ -1388,6 +1419,8 @@ audio.addEventListener('pause', () => {
   syncNow();
 });
 audio.addEventListener('timeupdate', render);
+audio.addEventListener('timeupdate', () => paintBuffer());
+for (const ev of ['progress', 'seeked', 'pause', 'play', 'ratechange', 'loadedmetadata', 'emptied']) audio.addEventListener(ev, () => paintBuffer(true));
 audio.addEventListener('ended', () => {
   if (P.trackIdx < P.tracks.length - 1) {
     loadTrack(P.trackIdx + 1, 0, true);
@@ -1896,7 +1929,16 @@ document.querySelectorAll('[data-usage-show]').forEach((b) => {
   b.onclick = () => {
     store('usageShow', b.dataset.usageShow === 'on');
     renderUsagePicker();
+document.querySelectorAll('[data-buffer-show]').forEach((b) => {
+  b.onclick = () => {
+    store('bufferShow', b.dataset.bufferShow === 'on');
+    renderBufferPicker();
+    paintBuffer(true);
+  };
+});
+renderBufferPicker();
     paintUsage();
+    paintBuffer(true);
   };
 });
 renderUsagePicker();
