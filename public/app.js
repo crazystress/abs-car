@@ -996,6 +996,33 @@ function setLoading(on) {
   $('c-play').setAttribute('aria-busy', on ? 'true' : 'false');
 }
 
+// Precarga del siguiente archivo (libros en varios archivos): unos 30 s antes de que acabe el actual,
+// un reproductor oculto empieza a descargarlo. El navegador comparte lo descargado entre reproductores
+// de la misma página, así que al cambiar de pista suena antes (menos tiempo con el spinner).
+const PREFETCH_BEFORE_S = 30;
+let prefetch = null; // { idx, el }
+
+function prefetchNextTrack() {
+  const next = P.trackIdx + 1;
+  if (!P.tracks || next >= P.tracks.length || prefetch?.idx === next || audio.paused) return;
+  const left = (audio.duration || P.tracks[P.trackIdx].duration) - audio.currentTime;
+  if (!(left < PREFETCH_BEFORE_S)) return;
+  dropPrefetch();
+  const el = new Audio();
+  el.preload = 'auto';
+  el.muted = true;
+  el.src = trackUrl(P.tracks[next].contentUrl);
+  el.load();
+  prefetch = { idx: next, el };
+}
+
+function dropPrefetch() {
+  if (!prefetch) return;
+  prefetch.el.removeAttribute('src');
+  prefetch.el.load(); // libera la conexión
+  prefetch = null;
+}
+
 function loadTrack(idx, offset, autoplay) {
   P.trackIdx = idx;
   setLoading(true);
@@ -1003,6 +1030,8 @@ function loadTrack(idx, offset, autoplay) {
   audio.addEventListener('loadedmetadata', function once() {
     audio.removeEventListener('loadedmetadata', once);
     audio.currentTime = Math.max(0, offset);
+    audio.playbackRate = store('speed') || 1; // la velocidad elegida también en la pista nueva
+    if (prefetch?.idx === idx) setTimeout(dropPrefetch, 5000); // ya la está usando el reproductor principal
     if (autoplay) play(); // el spinner sigue hasta que suene de verdad ('playing')
     else setLoading(false);
   });
@@ -1244,6 +1273,7 @@ function syncBeacon() {
 }
 
 async function closeSession() {
+  dropPrefetch();
   if (!P.sessionId) return;
   audio.pause();
   await syncNow();
@@ -1393,6 +1423,7 @@ audio.addEventListener('pause', () => {
   syncNow();
 });
 audio.addEventListener('timeupdate', render);
+audio.addEventListener('timeupdate', prefetchNextTrack);
 audio.addEventListener('timeupdate', () => paintBuffer());
 for (const ev of ['progress', 'seeked', 'pause', 'play', 'ratechange', 'loadedmetadata', 'emptied']) audio.addEventListener(ev, () => paintBuffer(true));
 audio.addEventListener('ended', () => {
@@ -1546,6 +1577,7 @@ function saveSpeedPresets(list) {
 function setSpeed(r) {
   r = roundSpeed(r);
   audio.playbackRate = r;
+  audio.defaultPlaybackRate = r; // al cargar otro archivo (siguiente pista) el navegador vuelve a esta velocidad
   store('speed', r);
   $('c-speed').textContent = speedLabel(r);
   $('speed-value').textContent = speedLabel(r);
