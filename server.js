@@ -103,7 +103,7 @@ setInterval(() => {
 // ---------- Registro de escuchas con ubicación (solo en este servidor) ----------
 // Un «tramo» es una escucha continua: empieza al dar a play y termina al pausar (una pausa corta en el
 // mismo libro continúa el tramo). Guarda el libro, horas, posiciones y, si el coche tiene la
-// ubicación activada, puntos de la ruta cada ~30 s. Un fichero por coche en DATA_DIR/logs/.
+// ubicación activada, puntos de la ruta cada ~30 s. Un fichero por usuario en DATA_DIR/logs/.
 const LOG_DIR = path.join(DATA_DIR, 'logs');
 try {
   fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -112,16 +112,40 @@ try {
 }
 const LOG_MAX_SEGMENTS = 2000;
 const LOG_MAX_POINTS = 3000; // por tramo (~25 h a un punto cada 30 s)
-const logs = new Map(); // device.id → [tramos]
+const logs = new Map(); // usuario de Audiobookshelf → [tramos]
 const logDirty = new Set();
 
-function logOf(device) {
-  if (!logs.has(device.id)) {
-    let list = [];
-    try { list = JSON.parse(fs.readFileSync(path.join(LOG_DIR, device.id + '.json'), 'utf8')); } catch {}
-    logs.set(device.id, Array.isArray(list) ? list : []);
+// El historial es del usuario de Audiobookshelf, no del coche: sobrevive a volver a vincular, a borrar
+// los datos del navegador y a cambiar de coche (cada tramo guarda desde qué coche se escuchó)
+const logKey = (device) => String(device.userId || device.username || device.id).replace(/[^\w-]/g, '_');
+
+function readLogFile(name) {
+  try {
+    const list = JSON.parse(fs.readFileSync(path.join(LOG_DIR, name + '.json'), 'utf8'));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
   }
-  return logs.get(device.id);
+}
+
+function logOf(device) {
+  const key = logKey(device);
+  if (!logs.has(key)) {
+    const list = readLogFile(key);
+    // Migración: historiales antiguos guardados por coche pasan al del usuario
+    for (const d of Object.values(store.devices)) {
+      if (logKey(d) !== key || d.id === key) continue;
+      const old = readLogFile(d.id);
+      if (!old.length) continue;
+      const ids = new Set(list.map((sg) => sg.id));
+      for (const sg of old) if (!ids.has(sg.id)) list.push({ car: d.name, ...sg });
+      try { fs.renameSync(path.join(LOG_DIR, d.id + '.json'), path.join(LOG_DIR, d.id + '.json.migrated')); } catch {}
+      logDirty.add(key);
+    }
+    list.sort((a, b) => a.startedAt - b.startedAt);
+    logs.set(key, list);
+  }
+  return logs.get(key);
 }
 
 async function saveLogs() {
@@ -205,7 +229,7 @@ function upsertSegment(device, body) {
   const list = logOf(device);
   let seg = list.find((s) => s.id === id);
   if (!seg) {
-    seg = { id, itemId: String(body.itemId || '').slice(0, 64), title: String(body.title || '').slice(0, 300),
+    seg = { id, car: device.name, itemId: String(body.itemId || '').slice(0, 64), title: String(body.title || '').slice(0, 300),
       author: String(body.author || '').slice(0, 200), startedAt: num(body.startedAt) || Date.now(), startPos: num(body.startPos) || 0, points: [] };
     list.push(seg);
     if (list.length > LOG_MAX_SEGMENTS) list.splice(0, list.length - LOG_MAX_SEGMENTS);
@@ -220,8 +244,8 @@ function upsertSegment(device, body) {
     if (seg.points.length < LOG_MAX_POINTS) seg.points.push(pt);
   }
   Object.assign(seg, routeStats(seg.points));
-  logDirty.add(device.id);
-  if (body.final) nameSegmentPlaces(seg, String(body.lang || 'en').slice(0, 5)).then(() => logDirty.add(device.id));
+  logDirty.add(logKey(device));
+  if (body.final) nameSegmentPlaces(seg, String(body.lang || 'en').slice(0, 5)).then(() => logDirty.add(logKey(device)));
   return seg;
 }
 
@@ -675,8 +699,8 @@ async function handle(req, res) {
     if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
     if (req.method === 'GET') return sendJson(res, 200, logSummary(device, Math.min(200, Number(url.searchParams.get('limit')) || 60)));
     if (req.method === 'DELETE') {
-      logs.set(device.id, []);
-      logDirty.add(device.id);
+      logs.set(logKey(device), []);
+      logDirty.add(logKey(device));
       await saveLogs();
       return sendJson(res, 200, { ok: true });
     }

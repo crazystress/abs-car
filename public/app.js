@@ -1943,6 +1943,7 @@ function renderStats({ totals, books, segments }) {
         <div class="bar"><div class="bar-fill" style="width:${((b.distance / max) * 100).toFixed(1)}%"></div></div></div>`).join('')
     : `<p class="st-empty">${escapeHtml(t('stats.noKm'))}</p>`;
 
+  const severalCars = new Set(segments.map((sg) => sg.car).filter(Boolean)).size > 1; // solo si hay más de un coche
   $('st-log').innerHTML = segments.length
     ? segments.map((sg) => {
         const meta = [`<b>${escapeHtml(fmtListened(sg.listened))}</b>`];
@@ -1951,7 +1952,7 @@ function renderStats({ totals, books, segments }) {
         const route = sg.from || sg.to
           ? `<div class="route"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ROUTE_ICON}"/></svg>${escapeHtml(sg.from || '?')} → ${escapeHtml(sg.to || '?')}</div>`
           : '';
-        return `<div class="st-seg"><div class="when">${escapeHtml(fmtDay(sg.startedAt))} · ${fmtClock(sg.startedAt)} → ${fmtClock(sg.endedAt)}</div>
+        return `<div class="st-seg"><div class="when">${escapeHtml(fmtDay(sg.startedAt))} · ${fmtClock(sg.startedAt)} → ${fmtClock(sg.endedAt)}${severalCars && sg.car ? ` · ${escapeHtml(sg.car)}` : ''}</div>
           <div class="book">${escapeHtml(sg.title || '—')}</div><div class="meta">${meta.join('<span>·</span>')}</div>${route}</div>`;
       }).join('')
     : `<p class="st-empty">${escapeHtml(t('stats.empty'))}</p>`;
