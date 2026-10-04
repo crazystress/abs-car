@@ -100,7 +100,8 @@ Phone ──code + username/password──▶ /car/pair
   automatically. The car only receives a cookie valid for one year.
 - All API calls and audio go through the built-in proxy, which only allows what the app needs.
 - The server also keeps, per car, the data usage counters shown in Settings (in
-  `abs-car-data/store.json`) and the listening log (in `abs-car-data/logs/`). If location is on,
+  `abs-car-data/store.json`), your app settings and the listening log (in `abs-car-data/logs/`),
+  linked to your Audiobookshelf user, so they follow you to any car you pair. If location is on,
   only the start and end coordinates of each listen are sent to OpenStreetMap (Nominatim) to get
   place names. Nothing else leaves your server, and the log can be deleted from Settings.
 - To unpair: ⚙️ Settings → "Unlink this car". You can also remove the car from

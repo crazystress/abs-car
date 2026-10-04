@@ -222,6 +222,10 @@ async function nameSegmentPlaces(seg, lang) {
   seg.to = await placeName(pts[pts.length - 1].lat, pts[pts.length - 1].lon, lang);
 }
 
+// Ajustes que se guardan por usuario (lo demás es de cada coche: ubicación, sección abierta, posiciones)
+const SETTINGS_KEYS = new Set(['theme', 'lang', 'speed', 'speedPresets', 'skip:back', 'skip:fwd', 'rewindOnResume',
+  'coverSize', 'heroStats', 'bufferShow', 'playerBg', 'syncFailThreshold', 'library']);
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
 function upsertSegment(device, body) {
   const id = String(body.id || '').slice(0, 64);
@@ -692,6 +696,23 @@ async function handle(req, res) {
       await saveStore();
     }
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie(DEVICE_COOKIE, '', 0) });
+  }
+
+  // Ajustes de la app por usuario de Audiobookshelf: los comparten todos sus coches y sobreviven a
+  // volver a vincular o a borrar el navegador
+  if (p === '/settings' && (req.method === 'GET' || req.method === 'PUT')) {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
+    store.users ||= {};
+    const key = logKey(device);
+    if (req.method === 'GET') return sendJson(res, 200, store.users[key] || { settings: {}, updatedAt: 0 });
+    const body = await readJson(req).catch(() => ({}));
+    const settings = {};
+    for (const [k, v] of Object.entries(body.settings || {})) {
+      if (SETTINGS_KEYS.has(k) && JSON.stringify(v).length <= 500) settings[k] = v;
+    }
+    store.users[key] = { settings, updatedAt: Date.now() };
+    await saveStore();
+    return sendJson(res, 200, { ok: true });
   }
 
   // Registro de escuchas: el coche envía sus tramos; Stats pide el resumen; Ajustes puede borrarlo

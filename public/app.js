@@ -15,11 +15,18 @@ const $ = (id) => document.getElementById(id);
 const audio = $('audio');
 
 // ---------- Utilidades ----------
+// Ajustes que se guardan también por usuario en el servidor de ABS Car (los comparten todos sus coches)
+const SYNCED_SETTINGS = ['theme', 'lang', 'speed', 'speedPresets', 'skip:back', 'skip:fwd', 'rewindOnResume',
+  'coverSize', 'heroStats', 'bufferShow', 'playerBg', 'syncFailThreshold', 'library'];
+let settingsApplying = false; // mientras se aplican los del servidor, no se vuelven a subir
+let settingsPushTimer = null;
+
 function store(key, value) {
   try {
     if (value === undefined) return JSON.parse(localStorage.getItem(key));
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
+    if (SYNCED_SETTINGS.includes(key)) scheduleSettingsPush();
   } catch {
     return null;
   }
@@ -139,7 +146,67 @@ async function init() {
   if (!me.paired) return startPairing();
   show(P.itemId ? 'player' : 'home');
   loadHome();
+  pullSettings();
 }
+
+// ---------- Ajustes por usuario ----------
+function localSettings() {
+  const out = {};
+  for (const k of SYNCED_SETTINGS) {
+    try {
+      const v = localStorage.getItem(k);
+      if (v !== null) out[k] = JSON.parse(v);
+    } catch {}
+  }
+  return out;
+}
+
+function scheduleSettingsPush() {
+  if (settingsApplying || !me?.paired) return;
+  clearTimeout(settingsPushTimer);
+  settingsPushTimer = setTimeout(() => {
+    fetch(BASE + '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: localSettings() }) }).catch(() => {});
+  }, 1000);
+}
+
+// Al abrir la app: si el usuario ya tiene ajustes guardados, se aplican; si no (primer coche), se suben los de aquí
+async function pullSettings() {
+  let data;
+  try {
+    data = await (await fetch(BASE + '/settings')).json();
+  } catch {
+    return;
+  }
+  const remote = data?.settings || {};
+  if (!Object.keys(remote).length) return scheduleSettingsPush();
+  settingsApplying = true;
+  try {
+    for (const k of SYNCED_SETTINGS) {
+      if (k in remote) localStorage.setItem(k, JSON.stringify(remote[k]));
+    }
+    applyAllSettings();
+  } catch {} finally {
+    settingsApplying = false;
+  }
+}
+
+function applyAllSettings() {
+  applyI18n(); // idioma (repinta los textos)
+  applyTheme();
+  applyPlayerBg();
+  applyCoverSize();
+  renderSkipButtons();
+  renderRewindPicker();
+  renderHeroStatsPicker();
+  renderBufferPicker();
+  renderSpeedChips();
+  setSpeed(store('speed') || 1);
+  $('fail-value').textContent = syncFailThreshold();
+  paintBuffer(true);
+  if (heroStats.id) renderHeroStats(heroStats.id);
+  if ($('view-settings').classList.contains('active')) renderSettings();
+}
+document.addEventListener('langchange', scheduleSettingsPush);
 
 async function loadProgress() {
   const user = await api('/api/me');
