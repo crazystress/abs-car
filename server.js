@@ -35,6 +35,13 @@ const STORE_FILE = path.join(DATA_DIR, 'store.json');
 
 // ---------- Almacenamiento (JSON en volumen) ----------
 fs.mkdirSync(DATA_DIR, { recursive: true });
+// Aviso claro si la carpeta de datos no admite escritura (p. ej. creada por Docker como root): sin esto
+// las vinculaciones y contadores solo vivirían en memoria y se perderían al reiniciar
+try {
+  fs.accessSync(DATA_DIR, fs.constants.W_OK);
+} catch {
+  console.error(`[store] ¡${DATA_DIR} no admite escritura! Las vinculaciones no se guardarán. Da la carpeta al usuario del contenedor (uid 1000): chown -R 1000:1000 <carpeta-de-datos>`);
+}
 let store = { devices: {} };
 try {
   store = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
@@ -92,6 +99,184 @@ setInterval(() => {
   usageDirty = false;
   saveStore();
 }, 30_000).unref();
+
+// ---------- Registro de escuchas con ubicación (solo en este servidor) ----------
+// Un «tramo» es una escucha continua: empieza al dar a play y termina al pausar (una pausa corta en el
+// mismo libro continúa el tramo). Guarda el libro, horas, posiciones y, si el coche tiene la
+// ubicación activada, puntos de la ruta cada ~30 s. Un fichero por usuario en DATA_DIR/logs/.
+const LOG_DIR = path.join(DATA_DIR, 'logs');
+try {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+} catch (e) {
+  console.error(`[log] no se puede crear ${LOG_DIR} (${e.code}): el registro de escuchas no se guardará en disco`);
+}
+const LOG_MAX_SEGMENTS = 2000;
+const LOG_MAX_POINTS = 3000; // por tramo (~25 h a un punto cada 30 s)
+const logs = new Map(); // usuario de Audiobookshelf → [tramos]
+const logDirty = new Set();
+
+// El historial es del usuario de Audiobookshelf, no del coche: sobrevive a volver a vincular, a borrar
+// los datos del navegador y a cambiar de coche (cada tramo guarda desde qué coche se escuchó)
+const logKey = (device) => String(device.userId || device.username || device.id).replace(/[^\w-]/g, '_');
+
+function readLogFile(name) {
+  try {
+    const list = JSON.parse(fs.readFileSync(path.join(LOG_DIR, name + '.json'), 'utf8'));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function logOf(device) {
+  const key = logKey(device);
+  if (!logs.has(key)) {
+    const list = readLogFile(key);
+    // Migración: historiales antiguos guardados por coche pasan al del usuario
+    for (const d of Object.values(store.devices)) {
+      if (logKey(d) !== key || d.id === key) continue;
+      const old = readLogFile(d.id);
+      if (!old.length) continue;
+      const ids = new Set(list.map((sg) => sg.id));
+      for (const sg of old) if (!ids.has(sg.id)) list.push({ car: d.name, ...sg });
+      try { fs.renameSync(path.join(LOG_DIR, d.id + '.json'), path.join(LOG_DIR, d.id + '.json.migrated')); } catch {}
+      logDirty.add(key);
+    }
+    list.sort((a, b) => a.startedAt - b.startedAt);
+    logs.set(key, list);
+  }
+  return logs.get(key);
+}
+
+async function saveLogs() {
+  for (const id of [...logDirty]) {
+    logDirty.delete(id);
+    const file = path.join(LOG_DIR, id + '.json');
+    try {
+      await fsp.writeFile(file + '.tmp', JSON.stringify(logs.get(id) || []), { mode: 0o600 });
+      await fsp.rename(file + '.tmp', file);
+    } catch (e) { console.error('[log] error guardando:', e.message); }
+  }
+}
+setInterval(saveLogs, 20_000).unref();
+
+// Distancia en metros entre dos puntos (fórmula del haversine)
+function meters(a, b) {
+  const R = 6371e3, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Kilómetros, tiempo en marcha y parado a partir de los puntos. Se ignoran puntos poco precisos y
+// los saltos entre puntos muy separados en el tiempo (pausas largas sin datos).
+const STOPPED_MPS = 1.4; // por debajo de ~5 km/h cuenta como parado (atasco, semáforo)
+function routeStats(points) {
+  const pts = points.filter((p) => !(p.acc > 100));
+  let distance = 0, moving = 0, stopped = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dt = (pts[i].t - pts[i - 1].t) / 1000;
+    if (dt <= 0 || dt > 180) continue;
+    const d = meters(pts[i - 1], pts[i]);
+    if (d / dt < STOPPED_MPS) stopped += dt;
+    else { moving += dt; distance += d; }
+  }
+  return { distance: Math.round(distance), moving: Math.round(moving), stopped: Math.round(stopped) };
+}
+
+// Nombres de lugar con OpenStreetMap (Nominatim): como mucho una consulta por segundo, con caché
+// por coordenadas redondeadas (~100 m). Solo salen las coordenadas, nada más del coche ni del usuario.
+const placeCache = new Map();
+let geocodeChain = Promise.resolve();
+function placeName(lat, lon, lang) {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)},${lang}`;
+  if (placeCache.has(key)) return Promise.resolve(placeCache.get(key));
+  const job = geocodeChain.then(async () => {
+    if (placeCache.has(key)) return placeCache.get(key);
+    let name = null;
+    try {
+      const qs = new URLSearchParams({ format: 'jsonv2', lat, lon, zoom: 14, 'accept-language': lang || 'en' });
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?${qs}`, {
+        headers: { 'User-Agent': `ABS-Car/${VERSION} (+https://github.com/crazystress/abs-car)` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) {
+        const a = (await r.json()).address || {};
+        const local = a.suburb || a.neighbourhood || a.quarter || a.city_district;
+        const town = a.city || a.town || a.village || a.municipality || a.county;
+        name = [local, town].filter((x, i, arr) => x && arr.indexOf(x) === i).join(', ') || null;
+      }
+    } catch {}
+    placeCache.set(key, name);
+    await new Promise((res) => setTimeout(res, 1100)); // política de uso de Nominatim: 1 consulta/s
+    return name;
+  });
+  geocodeChain = job.catch(() => {});
+  return job;
+}
+
+async function nameSegmentPlaces(seg, lang) {
+  const pts = seg.points.filter((p) => !(p.acc > 100));
+  if (!pts.length) return;
+  if (!seg.from) seg.from = await placeName(pts[0].lat, pts[0].lon, lang);
+  seg.to = await placeName(pts[pts.length - 1].lat, pts[pts.length - 1].lon, lang);
+}
+
+// Ajustes que se guardan por usuario (lo demás es de cada coche: ubicación, sección abierta, posiciones)
+const SETTINGS_KEYS = new Set(['theme', 'lang', 'speed', 'speedPresets', 'skip:back', 'skip:fwd', 'rewindOnResume',
+  'coverSize', 'heroStats', 'bufferShow', 'playerBg', 'syncFailThreshold', 'library']);
+
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
+function upsertSegment(device, body) {
+  const id = String(body.id || '').slice(0, 64);
+  if (!/^[\w-]{8,64}$/.test(id)) return null;
+  const list = logOf(device);
+  let seg = list.find((s) => s.id === id);
+  if (!seg) {
+    seg = { id, car: device.name, itemId: String(body.itemId || '').slice(0, 64), title: String(body.title || '').slice(0, 300),
+      author: String(body.author || '').slice(0, 200), startedAt: num(body.startedAt) || Date.now(), startPos: num(body.startPos) || 0, points: [] };
+    list.push(seg);
+    if (list.length > LOG_MAX_SEGMENTS) list.splice(0, list.length - LOG_MAX_SEGMENTS);
+  }
+  seg.endedAt = num(body.endedAt) || Date.now();
+  seg.endPos = num(body.endPos) ?? seg.endPos;
+  seg.listened = Math.max(seg.listened || 0, num(body.listened) || 0);
+  for (const p of Array.isArray(body.points) ? body.points : []) {
+    const pt = { t: num(p.t), lat: num(p.lat), lon: num(p.lon), acc: num(p.acc) };
+    if (!pt.t || pt.lat === undefined || pt.lon === undefined || Math.abs(pt.lat) > 90 || Math.abs(pt.lon) > 180) continue;
+    if (seg.points.length && pt.t <= seg.points[seg.points.length - 1].t) continue;
+    if (seg.points.length < LOG_MAX_POINTS) seg.points.push(pt);
+  }
+  Object.assign(seg, routeStats(seg.points));
+  logDirty.add(logKey(device));
+  if (body.final) nameSegmentPlaces(seg, String(body.lang || 'en').slice(0, 5)).then(() => logDirty.add(logKey(device)));
+  return seg;
+}
+
+// Resumen para la pantalla de estadísticas (sin los puntos de la ruta, que no hacen falta allí)
+function logSummary(device, limit) {
+  const list = logOf(device).filter((s) => (s.listened || 0) >= 30);
+  const totals = { listened: 0, distance: 0, moving: 0, stopped: 0, segments: list.length };
+  const books = new Map();
+  for (const s of list) {
+    totals.listened += s.listened || 0;
+    totals.distance += s.distance || 0;
+    totals.moving += s.moving || 0;
+    totals.stopped += s.stopped || 0;
+    if (s.distance) {
+      const b = books.get(s.itemId) || { itemId: s.itemId, title: s.title, distance: 0, moving: 0 };
+      b.distance += s.distance;
+      b.moving += s.moving || 0;
+      books.set(s.itemId, b);
+    }
+  }
+  const strip = ({ points, ...rest }) => ({ ...rest, hasRoute: points.length > 1 });
+  return {
+    totals,
+    books: [...books.values()].sort((a, b) => b.distance - a.distance).slice(0, 10),
+    segments: list.slice(-limit).reverse().map(strip),
+  };
+}
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const randomToken = () => crypto.randomBytes(32).toString('base64url');
@@ -513,6 +698,38 @@ async function handle(req, res) {
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie(DEVICE_COOKIE, '', 0) });
   }
 
+  // Ajustes de la app por usuario de Audiobookshelf: los comparten todos sus coches y sobreviven a
+  // volver a vincular o a borrar el navegador
+  if (p === '/settings' && (req.method === 'GET' || req.method === 'PUT')) {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
+    store.users ||= {};
+    const key = logKey(device);
+    if (req.method === 'GET') return sendJson(res, 200, store.users[key] || { settings: {}, updatedAt: 0 });
+    const body = await readJson(req).catch(() => ({}));
+    const settings = {};
+    for (const [k, v] of Object.entries(body.settings || {})) {
+      if (SETTINGS_KEYS.has(k) && JSON.stringify(v).length <= 500) settings[k] = v;
+    }
+    store.users[key] = { settings, updatedAt: Date.now() };
+    await saveStore();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Registro de escuchas: el coche envía sus tramos; Stats pide el resumen; Ajustes puede borrarlo
+  if (p === '/log' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
+    if (!device || device.invalid) return sendJson(res, 401, { error: 'relink' });
+    if (req.method === 'GET') return sendJson(res, 200, logSummary(device, Math.min(200, Number(url.searchParams.get('limit')) || 60)));
+    if (req.method === 'DELETE') {
+      logs.set(logKey(device), []);
+      logDirty.add(logKey(device));
+      await saveLogs();
+      return sendJson(res, 200, { ok: true });
+    }
+    const body = await readJson(req).catch(() => null);
+    const seg = body && upsertSegment(device, body);
+    return seg ? sendJson(res, 200, { ok: true }) : sendJson(res, 400, { error: 'invalid_segment' });
+  }
+
   // Estadísticas de escucha de un libro: el servidor suma las sesiones para no mandar al coche
   // la lista entera (cada sesión de Audiobookshelf trae muchos datos)
   const statsMatch = req.method === 'GET' && p.match(/^\/stats\/([\w-]+)$/);
@@ -556,6 +773,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   process.on(sig, async () => {
     server.close();
     await (usageDirty ? saveStore() : saveChain); // no perder los últimos contadores de datos
+    await saveLogs();
     process.exit(0);
   });
 }

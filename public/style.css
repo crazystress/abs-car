@@ -149,7 +149,8 @@ svg { fill: currentColor; }
 .topbar { display: flex; align-items: center; gap: 16px; padding: 20px 28px 12px; }
 .brand { width: 80px; height: 80px; flex: none; margin-right: 6px; } /* icono de la app, a la izquierda */
 .tabs { display: flex; gap: 12px; flex: none; }
-#btn-settings { margin-left: auto; flex: none; }
+#btn-stats { margin-left: auto; flex: none; }
+#btn-settings { flex: none; }
 
 /* Biblioteca: fila fija con buscador (izq.) y tipo de vista (der.), mitad y mitad */
 .lib-bar {
@@ -668,3 +669,34 @@ body.plain-bg .player-bg { display: none; } /* Ajustes → Apariencia → Fondo 
 
 .s-usage { display: grid; grid-template-columns: auto auto; gap: 4px 20px; font-size: 22px; color: var(--text-2); text-align: right; flex: none; }
 .s-usage b { color: var(--text); font-size: 26px; font-variant-numeric: tabular-nums; }
+
+/* ---------- Ubicación (Ajustes) ---------- */
+.s-alert { max-width: none; margin: 0 0 12px; }
+.s-value-sm { font-size: 22px; font-weight: 600; color: var(--text-2); text-align: right; flex: 0 1 auto; }
+.s-note { font-size: 19px; color: var(--muted); line-height: 1.45; margin: 12px 0 0; }
+
+/* ---------- Estadísticas ---------- */
+#view-stats { padding: 28px 40px 0; }
+.st-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 48px; }
+.st-notice { max-width: none; margin: 0 0 20px; }
+.st-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.st-tile { background: var(--panel); border-radius: var(--radius); padding: 22px 24px; }
+.st-tile b { display: block; font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.st-tile span { font-size: 19px; color: var(--muted); }
+.st-books { display: flex; flex-direction: column; gap: 10px; }
+.st-book { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; align-items: center; background: var(--panel); border-radius: var(--radius); padding: 16px 22px; }
+.st-book .t { font-size: 24px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-book .v { font-size: 24px; font-weight: 800; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.st-book .bar { grid-column: 1 / -1; height: 8px; }
+.st-log { display: flex; flex-direction: column; gap: 10px; }
+.st-seg { background: var(--panel); border-radius: var(--radius); padding: 18px 22px; display: grid; gap: 6px; }
+.st-seg .when { font-size: 20px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.st-seg .book { font-size: 25px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-seg .meta { font-size: 21px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.st-seg .meta b { color: var(--text); }
+.st-seg .route { font-size: 21px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.st-seg .route svg { width: 22px; height: 22px; color: var(--accent); flex: none; }
+.st-empty { color: var(--muted); font-size: 24px; padding: 24px 0; }
+.st-attrib { font-size: 15px; color: var(--muted); margin-top: 24px; }
+:root[data-theme="black"] :where(.st-tile, .st-book, .st-seg) { box-shadow: inset 0 0 0 1.5px var(--line); }
+@media (max-width: 900px) { #view-stats { padding: 20px 20px 0; } }
